@@ -1,0 +1,27 @@
+{
+    "id": "236E6B75",
+    "path": "~/IHAT Analysis/Beta_Diversity_Predictive_Fig4A.R",
+    "project_path": "Beta_Diversity_Predictive_Fig4A.R",
+    "type": "r_source",
+    "hash": "599193884",
+    "contents": "",
+    "dirty": false,
+    "created": 1756811745430.0,
+    "source_on_save": false,
+    "relative_order": 10,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "280,0",
+        "scrollLine": "263"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1756811802,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1756811802283,
+    "read_only": false,
+    "read_only_alternatives": []
+}
