@@ -1,0 +1,13 @@
+# IHAT_Analysis
+
+## Description
+This repository contains the R scripts used for microbiome and adverse event analyses in the IHAT study. The analyses focus on early-life gut microbiome composition, illness prediction, and associations with Prevotella stercorea abundance.
+
+## Data Availability
+The datasets generated and/or analyzed during the current study are available on Figshare ([DOI: 10.6084/m9.figshare.29350382](https://doi.org/10.6084/m9.figshare.29350382)) 
+- The scripts are written in R.
+- Ensure all required R packages are installed before running analyses (see individual scripts for package dependencies).
+- Example workflow:
+  1. Load required libraries.
+  2. Import dataset (from Figshare or local copy).
+  3. Run the analysis scripts in sequence as described in the manuscript.
