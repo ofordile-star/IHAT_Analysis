@@ -2,7 +2,6 @@
 # Load libraries
 # ======================================================
 library(tidyverse)
-library(broom)
 library(ggpubr)
 library(patchwork)
 if(!requireNamespace("devEMF", quietly = TRUE)) install.packages("devEMF")
@@ -31,22 +30,22 @@ analysis_data <- data %>%
   )
 
 # ======================================================
-# Normalize taxa to relative abundance
+# Normalize taxa to relative abundance (for ANOVA)
 # ======================================================
 taxa_names <- colnames(analysis_data)[5:14]
 
-analysis_data <- analysis_data %>%
+analysis_data_rel <- analysis_data %>%
   rowwise() %>%
   mutate(across(all_of(taxa_names), ~ .x / sum(c_across(all_of(taxa_names)), na.rm = TRUE))) %>%
   ungroup()
 
 # ======================================================
-# Run ANOVA and get adjusted p-values
+# Run ANOVA and adjust p-values
 # ======================================================
 anova_results_list <- list()
 for(taxon in taxa_names) {
   formula <- as.formula(paste(taxon, "~ Ill_Status * timepoints + age_group"))
-  model <- lm(formula, data = analysis_data)
+  model <- lm(formula, data = analysis_data_rel)
   anova_res <- anova(model)
   anova_df <- as.data.frame(anova_res) %>%
     rownames_to_column("term") %>%
@@ -63,7 +62,7 @@ terms_of_interest <- c("Ill_Status", "timepoints", "Ill_Status:timepoints", "age
 anova_results_filtered <- anova_results %>%
   filter(term %in% terms_of_interest) %>%
   mutate(
-    p.adj = p.adjust(p.value, method = "BH"),  
+    p.adj = p.adjust(p.value, method = "BH"),
     significant = p.adj < 0.05,
     term_short = case_when(
       term == "Ill_Status" ~ "p_ill",
@@ -74,7 +73,7 @@ anova_results_filtered <- anova_results %>%
   )
 
 # ======================================================
-# Prepare combined CSV with requested headings
+# Combined CSV with requested headings
 # ======================================================
 p_ill <- anova_results_filtered %>% filter(term_short == "p_ill") %>% arrange(match(taxon, taxa_names))
 p_time <- anova_results_filtered %>% filter(term_short == "p_time") %>% arrange(match(taxon, taxa_names))
@@ -91,7 +90,7 @@ write_csv(combined_results, "C:/Users/oofordile/Desktop/ANOVA_Combined_Results.c
 cat("Combined ANOVA CSV saved to Desktop as 'ANOVA_Combined_Results.csv'\n")
 
 # ======================================================
-# Prepare p-values for plotting
+# P-values for plotting
 # ======================================================
 plot_taxa <- c("Prevotella_stercorea_7.05", "Escherichia_coli_3.51")
 pvals_for_plot <- anova_results_filtered %>%
@@ -100,7 +99,7 @@ pvals_for_plot <- anova_results_filtered %>%
   mutate(p.label = paste0("adj p = ", signif(p.adj, 3)))
 
 # ======================================================
-# Prepare long-format data for plotting
+# Long-format data (raw counts for Prevotella, log for E. coli)
 # ======================================================
 long_data <- analysis_data %>%
   dplyr::select(`Randomisation No`, timepoints, Ill_Status, all_of(plot_taxa)) %>%
@@ -117,20 +116,24 @@ long_data$Taxa <- factor(long_data$Taxa, levels = c("Prevotella_stercorea_7.05",
 long_data$TaxaLabel <- factor(long_data$TaxaLabel, levels = c("italic('Prevotella stercorea')", "italic('Escherichia coli')"))
 
 # ======================================================
-# Function to create taxa plot with automatic p-value
+# Function to create taxa plot
 # ======================================================
-make_taxa_plot <- function(df, ylab) {
+make_taxa_plot <- function(df, ylab, force_ylim = NULL) {
   y_max <- max(df$Value, na.rm = TRUE)
   y_min <- min(df$Value, na.rm = TRUE)
   y_range <- y_max - y_min
   taxa_name <- unique(df$Taxa)
   pval <- pvals_for_plot$p.label[pvals_for_plot$taxon == taxa_name]
   
-  ggplot(df, aes(x = timepoints, y = Value, fill = Ill_Status)) +
+  # Use consistent annotation positioning for both plots
+  annot_y <- y_max + y_range * 0.05
+  
+  p <- ggplot(df, aes(x = timepoints, y = Value, fill = Ill_Status)) +
     geom_boxplot(position = position_dodge(0.7), width = 0.6, alpha = 0.8, color = "black", outlier.shape = NA) +
     geom_jitter(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.7), alpha = 0.4, size = 1) +
     stat_summary(fun = median, geom = "line", aes(group = Ill_Status, color = Ill_Status), size = 1, position = position_dodge(0.7)) +
-    geom_text(data = df %>% dplyr::distinct(TaxaLabel), aes(x = 2, y = y_max + y_range*0.05, label = pval), inherit.aes = FALSE, size = 5) +
+    geom_text(data = df %>% dplyr::distinct(TaxaLabel), 
+              aes(x = 2, y = annot_y, label = pval), inherit.aes = FALSE, size = 5) +
     scale_fill_manual(values = c("Ill" = "#FF6666", "Not-Ill" = "#6699FF")) +
     scale_color_manual(values = c("Ill" = "red", "Not-Ill" = "blue")) +
     labs(x = "Study Day", y = ylab, fill = "Status", color = "Status") +
@@ -145,15 +148,26 @@ make_taxa_plot <- function(df, ylab) {
       panel.spacing = unit(0.5, "lines"),
       axis.ticks = element_line(size = 0.3, color = "black"),
       axis.ticks.length = unit(-2, "mm")
-    ) +
-    expand_limits(y = y_max + y_range*0.1)
+    )
+  
+  if (!is.null(force_ylim)) {
+    p <- p + coord_cartesian(ylim = force_ylim)
+  } else {
+    p <- p + expand_limits(y = y_max + y_range*0.1)
+  }
+  return(p)
 }
 
 # ======================================================
 # Create plots
 # ======================================================
-prev_plot <- long_data %>% filter(Taxa == "Prevotella_stercorea_7.05") %>% make_taxa_plot(ylab = "Count")
-ecoli_plot <- long_data %>% filter(Taxa == "Escherichia_coli_3.51") %>% make_taxa_plot(ylab = "Log Abundance")
+prev_plot <- long_data %>% 
+  filter(Taxa == "Prevotella_stercorea_7.05") %>% 
+  make_taxa_plot(ylab = "Count")
+
+ecoli_plot <- long_data %>% 
+  filter(Taxa == "Escherichia_coli_3.51") %>% 
+  make_taxa_plot(ylab = "Log Abundance", force_ylim = c(0, 5))
 
 # Combine plots with shared legend
 taxa_plot <- prev_plot + ecoli_plot + plot_layout(ncol = 2, guides = "collect") & 
