@@ -42,12 +42,18 @@ df_corr <- df %>%
     Ill_num = ifelse(Ill_Status == "Ill", 1, 0)
   )
 
-# ANOVA for age effect (for label)
+# ANOVA for age effect - using same method as first script
 anova_res <- aov(logP ~ age_group, data = df_corr)
 anova_summary <- summary(anova_res)[[1]]
 anova_F <- anova_summary[["F value"]][1]
-# Keep F rounded to 2 dp; p reported as extremely small in your original text
-anova_label <- paste0("ANOVA F(2) = ", round(anova_F, 2), ", P < 2e-16")
+anova_p <- anova_summary[["Pr(>F)"]][1]
+
+# Create ANOVA label with calculated values
+if (anova_p < 2e-16) {
+  anova_label <- paste0("ANOVA F(2) = ", round(anova_F, 2), ", P < 2e-16")
+} else {
+  anova_label <- paste0("ANOVA F(2) = ", round(anova_F, 2), ", P = ", formatC(anova_p, format = "e", digits = 2))
+}
 
 # Logistic regression with interaction
 glm_fit <- glm(Ill_num ~ logP * age_group, data = df_corr, family = binomial)
