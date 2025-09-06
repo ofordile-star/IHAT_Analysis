@@ -35,14 +35,13 @@ age_colors <- c(
 # PANEL A: P. stercorea by Illness Status and Age Group
 # ======================================================
 
-# ---- ANOVA dataset (exclude zeros, log-transform directly) ----
+# ---- ANOVA dataset (with pseudocount) ----
 df_anova <- df %>%
   filter(!is.na(`Prevotella_stercorea_7.05`),
-         `Prevotella_stercorea_7.05` > 0,   # remove zeros
          !is.na(Ill_Status),
          !is.na(age_group)) %>%
   mutate(
-    logP = log(`Prevotella_stercorea_7.05`)
+    logP = log(`Prevotella_stercorea_7.05` + 1) # pseudocount
   )
 
 anova_res <- aov(logP ~ age_group, data = df_anova)
@@ -69,7 +68,7 @@ if (anova_p < 2e-16) {
                         ", P = ", formatC(anova_p, format = "e", digits = 2))
 }
 
-# ---- Logistic regression dataset (keep zeros with pseudocount) ----
+# ---- Logistic regression dataset (also with pseudocount) ----
 df_corr <- df %>%
   filter(!is.na(`Prevotella_stercorea_7.05`),
          !is.na(Ill_Status),
