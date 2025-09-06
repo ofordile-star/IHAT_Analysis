@@ -116,7 +116,7 @@ plot_a_inner <- ggplot(df_corr, aes(x = Ill_Status, y = logP, fill = age_group))
   facet_wrap(~age_group) +
   labs(
     x = "Illness Status",
-    y = expression("Log Abundance of " * italic("Prevotella stercorea"))
+    y = expression("Log(count + 1) of " * italic("Prevotella stercorea"))
   ) +
   theme_minimal(base_size = 10) +
   theme(
