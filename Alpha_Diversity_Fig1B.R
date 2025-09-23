@@ -1,13 +1,3 @@
-# ======================================================
-# Full ready-to-run script: Age-stratified alpha plots
-# - Comparison title placed just below the age label (title -> subtitle)
-# - Font sizes reduced by 1 unit
-# - p-value annotation font now matches comparison subtitle font
-# - Exports two canvases (Richness only and Fisher only), each PDF + EMF
-# - UPDATED: Comparison and p-value fonts reduced by additional 1 unit
-# - Minimal thin axis lines + INWARD ticks added
-# ======================================================
-
 # Load Libraries
 library(phyloseq)
 library(ggplot2)
