@@ -179,7 +179,7 @@ taxa_plot <- prev_plot + ecoli_plot + plot_layout(ncol = 2, guides = "collect") 
 
 # Add main title
 taxa_plot <- taxa_plot + plot_annotation(
-  title = "Taxa with significant Ill vs Not-Ill gap (FDR and Age adjusted p < 0.05)",
+  title = "Taxa with significant Ill vs Not-Ill gap (FDR and age adjusted p < 0.05)",
   theme = theme(plot.title = element_text(hjust = 0.5, size = 16))
 )
 
