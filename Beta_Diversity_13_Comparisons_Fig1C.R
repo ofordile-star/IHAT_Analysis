@@ -71,22 +71,22 @@ sample_data(physeq)$Randomisation_No <- factor(sample_data(physeq)$Randomisation
 physeq_rel <- transform_sample_counts(physeq, function(x) x / sum(x))
 
 # ======================================================
-# Define Comparisons
+# Define Comparisons with Cross-Timepoint Indicator
 # ======================================================
 comparisons <- list(
-  list(name = "D1 Ill vs D1 Not-Ill", filter = expression(Timepoints == "D1" & Ill_Status %in% c("Ill","Not-Ill")), group_var = "Ill_Status"),
-  list(name = "D15 Ill vs D15 Not-Ill", filter = expression(Timepoints == "D15" & Ill_Status %in% c("Ill","Not-Ill")), group_var = "Ill_Status"),
-  list(name = "D85 Ill vs D85 Not-Ill", filter = expression(Timepoints == "D85" & Ill_Status %in% c("Ill","Not-Ill")), group_var = "Ill_Status"),
-  list(name = "D1 vs D15 Not-Ill", filter = expression(Timepoints %in% c("D1","D15") & Ill_Status == "Not-Ill"), group_var = "Timepoints"),
-  list(name = "D15 vs D85 Not-Ill", filter = expression(Timepoints %in% c("D15","D85") & Ill_Status == "Not-Ill"), group_var = "Timepoints"),
-  list(name = "D1 vs D85 Not-Ill", filter = expression(Timepoints %in% c("D1","D85") & Ill_Status == "Not-Ill"), group_var = "Timepoints"),
-  list(name = "D1 vs D15 Ill", filter = expression(Timepoints %in% c("D1","D15") & Ill_Status == "Ill"), group_var = "Timepoints"),
-  list(name = "D15 vs D85 Ill", filter = expression(Timepoints %in% c("D15","D85") & Ill_Status == "Ill"), group_var = "Timepoints"),
-  list(name = "D1 vs D85 Ill", filter = expression(Timepoints %in% c("D1","D85") & Ill_Status == "Ill"), group_var = "Timepoints"),
-  list(name = "D1 Ill vs D85 Not-Ill", filter = expression((Ill_Status == "Ill" & Timepoints == "D1") | (Ill_Status == "Not-Ill" & Timepoints == "D85")), group_var = "Ill_Status"),
-  list(name = "D15 Ill vs D85 Not-Ill", filter = expression((Ill_Status == "Ill" & Timepoints == "D15") | (Ill_Status == "Not-Ill" & Timepoints == "D85")), group_var = "Ill_Status"),
-  list(name = "D1 Not-Ill vs D85 Ill", filter = expression((Ill_Status == "Not-Ill" & Timepoints == "D1") | (Ill_Status == "Ill" & Timepoints == "D85")), group_var = "Ill_Status"),
-  list(name = "D15 Not-Ill vs D85 Ill", filter = expression((Ill_Status == "Not-Ill" & Timepoints == "D15") | (Ill_Status == "Ill" & Timepoints == "D85")), group_var = "Ill_Status")
+  list(name = "D1 Ill vs D1 Not-Ill", filter = expression(Timepoints == "D1" & Ill_Status %in% c("Ill","Not-Ill")), group_var = "Ill_Status", cross_timepoint = FALSE, paired = FALSE),
+  list(name = "D15 Ill vs D15 Not-Ill", filter = expression(Timepoints == "D15" & Ill_Status %in% c("Ill","Not-Ill")), group_var = "Ill_Status", cross_timepoint = FALSE, paired = FALSE),
+  list(name = "D85 Ill vs D85 Not-Ill", filter = expression(Timepoints == "D85" & Ill_Status %in% c("Ill","Not-Ill")), group_var = "Ill_Status", cross_timepoint = FALSE, paired = FALSE),
+  list(name = "D1 vs D15 Not-Ill", filter = expression(Timepoints %in% c("D1","D15") & Ill_Status == "Not-Ill"), group_var = "Timepoints", cross_timepoint = TRUE, paired = TRUE),
+  list(name = "D15 vs D85 Not-Ill", filter = expression(Timepoints %in% c("D15","D85") & Ill_Status == "Not-Ill"), group_var = "Timepoints", cross_timepoint = TRUE, paired = TRUE),
+  list(name = "D1 vs D85 Not-Ill", filter = expression(Timepoints %in% c("D1","D85") & Ill_Status == "Not-Ill"), group_var = "Timepoints", cross_timepoint = TRUE, paired = TRUE),
+  list(name = "D1 vs D15 Ill", filter = expression(Timepoints %in% c("D1","D15") & Ill_Status == "Ill"), group_var = "Timepoints", cross_timepoint = TRUE, paired = TRUE),
+  list(name = "D15 vs D85 Ill", filter = expression(Timepoints %in% c("D15","D85") & Ill_Status == "Ill"), group_var = "Timepoints", cross_timepoint = TRUE, paired = TRUE),
+  list(name = "D1 vs D85 Ill", filter = expression(Timepoints %in% c("D1","D85") & Ill_Status == "Ill"), group_var = "Timepoints", cross_timepoint = TRUE, paired = TRUE),
+  list(name = "D1 Ill vs D85 Not-Ill", filter = expression((Ill_Status == "Ill" & Timepoints == "D1") | (Ill_Status == "Not-Ill" & Timepoints == "D85")), group_var = "Ill_Status", cross_timepoint = TRUE, paired = FALSE),
+  list(name = "D15 Ill vs D85 Not-Ill", filter = expression((Ill_Status == "Ill" & Timepoints == "D15") | (Ill_Status == "Not-Ill" & Timepoints == "D85")), group_var = "Ill_Status", cross_timepoint = TRUE, paired = FALSE),
+  list(name = "D1 Not-Ill vs D85 Ill", filter = expression((Ill_Status == "Not-Ill" & Timepoints == "D1") | (Ill_Status == "Ill" & Timepoints == "D85")), group_var = "Ill_Status", cross_timepoint = TRUE, paired = FALSE),
+  list(name = "D15 Not-Ill vs D85 Ill", filter = expression((Ill_Status == "Not-Ill" & Timepoints == "D15") | (Ill_Status == "Ill" & Timepoints == "D85")), group_var = "Ill_Status", cross_timepoint = TRUE, paired = FALSE)
 )
 
 # ======================================================
@@ -115,6 +115,8 @@ for (comp in comparisons) {
   comp_name <- comp$name
   filter_expr <- comp$filter
   group_var <- comp$group_var
+  is_cross_timepoint <- comp$cross_timepoint
+  is_paired <- comp$paired
   
   cat("Processing comparison:", comp_name, "\n")
   
@@ -126,22 +128,45 @@ for (comp in comparisons) {
   dist_mat <- vegdist(otu_mat_sub, method = "bray")
   sample_df_sub <- as(sample_data(ps_subset), "data.frame")
   
-  # Overall PERMANOVA
+  # Overall PERMANOVA (with random effect ONLY for paired cross-timepoint comparisons)
   set.seed(12345 + comp_index)
-  adonis_res <- adonis2(as.dist(dist_mat) ~ sample_df_sub[[group_var]] + sample_df_sub$AgeGroup, permutations = 999)
+  use_random_effect <- (is_cross_timepoint && is_paired)
+  
+  if (use_random_effect) {
+    # Use strata parameter to account for repeated measures (paired data only)
+    adonis_res <- adonis2(as.dist(dist_mat) ~ sample_df_sub[[group_var]] + sample_df_sub$AgeGroup, 
+                          permutations = 999, 
+                          strata = sample_df_sub$Randomisation_No)
+    cat("  - Using random effect (strata) for SubjectID in overall PERMANOVA (paired comparison)\n")
+  } else {
+    # No random effect for within-timepoint or unpaired comparisons
+    adonis_res <- adonis2(as.dist(dist_mat) ~ sample_df_sub[[group_var]] + sample_df_sub$AgeGroup, 
+                          permutations = 999)
+    if (is_cross_timepoint && !is_paired) {
+      cat("  - No random effect used (unpaired comparison across timepoints/groups)\n")
+    }
+  }
+  
+  # Diagnostic output for problematic comparisons
+  if (!use_random_effect && is_cross_timepoint) {
+    cat("  - Sample sizes by group:", table(sample_df_sub[[group_var]]), "\n")
+    cat("  - Number of unique subjects:", length(unique(sample_df_sub$Randomisation_No)), "\n")
+  }
+  
   df <- adonis_res$Df[1]
   sum_of_sqs <- adonis_res$SumOfSqs[1]
   r2 <- adonis_res$R2[1]
   f_stat <- adonis_res$F[1]
   p_val <- adonis_res$`Pr(>F)`[1]
   
-  # Age-stratified PERMANOVA
+  # Age-stratified PERMANOVA 
   age_permanova <- lapply(levels(sample_df_sub$AgeGroup), function(ag){
     idx <- sample_df_sub$AgeGroup == ag
     dist_sub <- as.dist(as.matrix(dist_mat)[idx, idx])
     grp_sub <- sample_df_sub[[group_var]][idx]
     if ( length(unique(grp_sub)) > 1 ) {
       set.seed(12345 + comp_index + which(levels(sample_df_sub$AgeGroup) == ag))
+      # NO strata used in age-stratified analyses
       ad_res <- adonis2(dist_sub ~ grp_sub, permutations = 999)
       data.frame(
         AgeGroup = ag,
@@ -269,6 +294,9 @@ for (comp in comparisons) {
   # --- Store PERMANOVA Results ---
   results_summary[[comp_name]] <- data.frame(
     Comparison = comp_name,
+    Cross_Timepoint = is_cross_timepoint,
+    Paired = is_paired,
+    Random_Effect_Used = (is_cross_timepoint && is_paired),
     PERMANOVA_Df = round(df, 4),
     PERMANOVA_SumOfSqs = round(sum_of_sqs, 4),
     PERMANOVA_R2 = round(r2, 4),
@@ -356,3 +384,6 @@ cat("- BetaDiversity_AgeStratified_PERMANOVA_Summary.csv\n")
 cat("- BetaDiversity_PCoA_Centroid_SquareCanvas.pdf/.emf\n")
 cat("- BetaDiversity_PCoA_Centroid_Canvas2A.pdf/.emf\n")
 cat("- BetaDiversity_PCoA_Centroid_Canvas2B.pdf/.emf\n")
+cat("\nNote: Random effects (strata) applied only to paired cross-timepoint comparisons in overall PERMANOVA.\n")
+cat("Paired comparisons: D1 vs D15, D15 vs D85, D1 vs D85 (within Ill or Not-Ill groups)\n")
+cat("Unpaired comparisons: Different subjects at different timepoints (e.g., D1 Ill vs D85 Not-Ill)\n")
