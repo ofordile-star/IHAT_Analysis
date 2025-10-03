@@ -11,7 +11,7 @@ print(colnames(data))
 # Choose age group column
 age_col <- "3agegroups based on age at sampling"
 
-# ID column identified from your dataset
+# ID column 
 id_col <- "Randomisation No"
 
 # Function to summarise females for a grouping variable, stratified by age

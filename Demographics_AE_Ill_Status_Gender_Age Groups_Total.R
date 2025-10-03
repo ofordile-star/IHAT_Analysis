@@ -4,7 +4,7 @@ library(readr)
 # Load data
 data <- read_csv("C:/Users/oofordile/Desktop/Merged_Illness_Cohorts.csv")
 
-# ID column from your dataset
+# ID column 
 id_col <- "Randomisation No"
 
 # Function to summarise females for a grouping variable
