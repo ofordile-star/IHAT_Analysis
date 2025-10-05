@@ -185,7 +185,6 @@ p_dur <- ggplot() +
     axis.ticks = element_line(size=0.3, colour="black"),
     axis.ticks.length = unit(-2, "mm")  # Negative value makes ticks point inward
   ) +
-  # Expand y-axis to accommodate moved annotations
   expand_limits(y = annot_y_upper + 0.2)
 
 # ======================================================
