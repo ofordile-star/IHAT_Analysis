@@ -118,7 +118,6 @@ dur_ci_group <- tidy(dur_lm_group, conf.int = TRUE)
 r2_group_dur <- broom::glance(dur_lm_group)$r.squared
 
 mid_x <- max(dur_summary$AE_duration)/2
-# Move annotations higher up to avoid overlap with data points
 annot_y_upper <- max(dur_summary$mean_log_P) + 1.0  # Increased from 0.60
 annot_y_lower <- max(dur_summary$mean_log_P) + 0.55  # Adjusted to maintain spacing
 
@@ -155,7 +154,6 @@ p_freq <- ggplot() +
     axis.ticks = element_line(size=0.3, colour="black"),
     axis.ticks.length = unit(-2, "mm")  # Negative value makes ticks point inward
   ) +
-  # Expand y-axis to accommodate moved annotations
   expand_limits(y = annot_y_upper + 0.2)
 
 # Duration plot
