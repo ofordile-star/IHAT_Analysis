@@ -4,8 +4,8 @@
 library(tidyverse)
 library(reshape2)
 library(Cairo)
-library(devEMF)  # For EMF export
-library(grid)     # For unit()
+library(devEMF)
+library(grid)
 
 # ======================================================
 # Set file path
@@ -24,24 +24,31 @@ data <- data %>% filter(!is.na(Ill_Status) & Ill_Status != "")
 microbiome_data <- data[, 13:500]
 meta_data <- data[, c("Randomisation No", "timepoints", "Ill_Status")]
 
-# Combine metadata and microbiome
-full_data <- cbind(meta_data, microbiome_data)
+# ======================================================
+# Convert to relative abundance per sample
+# ======================================================
+microbiome_rel <- microbiome_data / rowSums(microbiome_data, na.rm = TRUE) * 100  # Convert to %
+full_data <- cbind(meta_data, microbiome_rel)
 
+# ======================================================
 # Melt to long format
-long_data <- melt(full_data, id.vars = c("Randomisation No", "timepoints", "Ill_Status"),
-                  variable.name = "Taxon", value.name = "Abundance")
+# ======================================================
+long_data <- melt(full_data,
+                  id.vars = c("Randomisation No", "timepoints", "Ill_Status"),
+                  variable.name = "Taxon",
+                  value.name = "RelAbundance")
 
 # Clean Taxon names: remove numeric suffixes and underscores
 long_data$Taxon <- gsub("_\\d+\\.\\d+$", "", long_data$Taxon)
 long_data$Taxon <- gsub("_", " ", long_data$Taxon)
 
 # ======================================================
-# Calculate top 50 most abundant taxa overall
+# Calculate top 50 most relatively abundant taxa overall
 # ======================================================
 top_taxa_ordered <- long_data %>%
   group_by(Taxon) %>%
-  summarise(Total_Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
-  arrange(desc(Total_Abundance)) %>%
+  summarise(Total_RelAbundance = sum(RelAbundance, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(Total_RelAbundance)) %>%
   slice(1:50)
 
 top_taxa <- top_taxa_ordered$Taxon
@@ -53,13 +60,13 @@ long_data_top <- long_data %>% filter(Taxon %in% top_taxa)
 long_data_top$Taxon <- factor(long_data_top$Taxon, levels = top_taxa)
 
 # ======================================================
-# Calculate mean and SEM
+# Calculate mean and SEM (relative abundance)
 # ======================================================
 summary_data <- long_data_top %>%
   group_by(Taxon, timepoints, Ill_Status) %>%
   summarise(
-    Mean = mean(Abundance, na.rm = TRUE),
-    SEM = sd(Abundance, na.rm = TRUE)/sqrt(n()),
+    Mean = mean(RelAbundance, na.rm = TRUE),
+    SEM = sd(RelAbundance, na.rm = TRUE) / sqrt(n()),
     .groups = "drop"
   )
 
@@ -70,14 +77,14 @@ summary_data$TaxonLabel <- factor(summary_data$TaxonLabel,
                                   levels = paste0("italic('", top_taxa, "')"))
 
 # ======================================================
-# Export CSV of summary data
+# Export summary data as CSV
 # ======================================================
-write.csv(summary_data, 
-          "C:/Users/oofordile/Desktop/Top50_Taxa_Longitudinal_Summary.csv",
+write.csv(summary_data,
+          "C:/Users/oofordile/Desktop/Top50_Taxa_RelativeAbundance_Summary.csv",
           row.names = FALSE)
 
 # ======================================================
-# Create plot
+# Create plot (relative abundance)
 # ======================================================
 plot <- ggplot(summary_data, aes(x = timepoints, y = Mean, group = Ill_Status, color = Ill_Status)) +
   geom_line(linewidth = 0.8) +
@@ -85,7 +92,11 @@ plot <- ggplot(summary_data, aes(x = timepoints, y = Mean, group = Ill_Status, c
   geom_errorbar(aes(ymin = Mean - SEM, ymax = Mean + SEM), width = 0.2) +
   facet_wrap(~ TaxonLabel, scales = "free_y", ncol = 5, labeller = label_parsed) +
   scale_color_manual(values = c("Ill" = "#FF0000", "Not-Ill" = "#0000FF")) +
-  labs(x = "Timepoint", y = "Mean Abundance ± SEM", color = "Ill Status") +
+  labs(
+    x = "Timepoint",
+    y = "Mean Relative Abundance (%) ± SEM",
+    color = "Ill Status"
+  ) +
   theme_bw(base_size = 10) +
   theme(
     panel.grid = element_blank(),
@@ -94,22 +105,22 @@ plot <- ggplot(summary_data, aes(x = timepoints, y = Mean, group = Ill_Status, c
     strip.text = element_text(size = 8),
     axis.text.x = element_text(angle = 45, hjust = 1),
     axis.ticks = element_line(size = 0.3, color = "black"),
-    axis.ticks.length = unit(-2, "mm"),  # Negative value makes ticks point inward
+    axis.ticks.length = unit(-2, "mm"),
     legend.position = "bottom",
     legend.title = element_text(size = 10),
     legend.text = element_text(size = 8)
   )
 
 # ======================================================
-# Save PDF
+# Save as PDF
 # ======================================================
-ggsave("C:/Users/oofordile/Desktop/Top50_Taxa_Longitudinal_Sorted.pdf",
+ggsave("C:/Users/oofordile/Desktop/Top50_Taxa_RelativeAbundance.pdf",
        plot = plot, device = cairo_pdf, width = 12, height = 15, units = "in")
 
 # ======================================================
-# Save EMF
+# Save as EMF
 # ======================================================
-emf("C:/Users/oofordile/Desktop/Top50_Taxa_Longitudinal_Sorted.emf",
+emf("C:/Users/oofordile/Desktop/Top50_Taxa_RelativeAbundance.emf",
     width = 12, height = 15)
 print(plot)
 dev.off()

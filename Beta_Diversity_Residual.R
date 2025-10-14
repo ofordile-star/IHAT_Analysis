@@ -6,6 +6,10 @@ library(ggplot2)
 library(patchwork)
 library(cowplot)
 library(devEMF)
+library(boot)
+
+# === Reproducibility: Fix seed ===
+set.seed(12345)
 
 # === Load Data ===
 microbiome_path <- "C:/Users/oofordile/Desktop/Merged_Illness_Cohorts.csv"
@@ -75,36 +79,119 @@ physeq_rel <- transform_sample_counts(physeq, function(x) x / sum(x))
 
 # === Define Group Colors & Shapes ===
 group_colors <- c(
-  "D85 Not-Ill" = "#4575B4", "Early-Ill" = "#F0E442", "Recent-Ill" = "#D73027"
+  "D85 Not-Ill" = "#4575B4",   # blue
+  "Early-Ill"   = "#F0E442",   # yellow
+  "Recent-Ill"  = "#FFA500"    # orange
 )
-age_shapes <- c("7 to 12 months" = 15, "1 to 2 years" = 16, "plus 2 years" = 17)
+age_shapes <- c("7 to 12 months" = 22, "1 to 2 years" = 21, "plus 2 years" = 24)
+
+# ======================================================
+# OPTIMIZED: Function to calculate 95% CI for R² using bootstrap
+# Reduced iterations from 999 to 199 for speed
+# ======================================================
+calculate_r2_ci <- function(dist_mat, group_var, age_var, n_boot = 199, strata_var = NULL) {
+  tryCatch({
+    boot_r2 <- function(data, indices) {
+      boot_dist <- as.dist(as.matrix(dist_mat)[indices, indices])
+      boot_group <- group_var[indices]
+      boot_age <- age_var[indices]
+      
+      if (length(unique(boot_group)) < 2) return(NA)
+      
+      if (!is.null(strata_var)) {
+        boot_strata <- strata_var[indices]
+        ad <- adonis2(boot_dist ~ boot_group + boot_age, permutations = 49, strata = boot_strata)
+      } else {
+        ad <- adonis2(boot_dist ~ boot_group + boot_age, permutations = 49)
+      }
+      return(ad$R2[1])
+    }
+    
+    boot_result <- boot(data = 1:length(group_var), statistic = boot_r2, R = n_boot)
+    ci <- boot.ci(boot_result, type = "perc")
+    
+    if (!is.null(ci)) {
+      return(c(ci$percent[4], ci$percent[5]))
+    } else {
+      return(c(NA, NA))
+    }
+  }, error = function(e) {
+    return(c(NA, NA))
+  })
+}
 
 # === Group Analysis Function ===
-analyze_group <- function(group_name, physeq_obj){
+analyze_group <- function(group_name, physeq_obj, comp_index){
   subset_samples <- sample_names(physeq_obj)[sample_data(physeq_obj)$Group %in% c("D85 Not-Ill", group_name)]
   physeq_sub <- prune_samples(subset_samples, physeq_obj)
   
   bray_dist <- phyloseq::distance(physeq_sub, method="bray")
   sample_data_df <- data.frame(sample_data(physeq_sub))
   
-  set.seed(42)
+  # Overall PERMANOVA
+  set.seed(12345 + comp_index)
   perm_res <- vegan::adonis2(bray_dist ~ Group + AgeGroup, data=sample_data_df, permutations=999)
   
+  f_stat <- perm_res$F[1]
+  r2 <- perm_res$R2[1]
+  p_val <- perm_res$`Pr(>F)`[1]
+  df_num <- perm_res$Df[1]
+  df_denom <- perm_res$Df[length(perm_res$Df) - 1]
+  
+  # Calculate 95% CI for R²
+  message("  Calculating bootstrap CI for R² for ", group_name, "...")
+  ci_r2 <- calculate_r2_ci(bray_dist, sample_data_df$Group, sample_data_df$AgeGroup, n_boot = 199)
+  
+  # Beta dispersion
   betadisp <- vegan::betadisper(bray_dist, sample_data_df$Group)
   kw_res <- kruskal.test(betadisp$distances ~ sample_data_df$Group)
+  kruskal_stat <- kw_res$statistic
+  kruskal_df <- kw_res$parameter
+  disp_p <- kw_res$p.value
   
-  # PERMANOVA per AgeGroup
+  # Age-stratified PERMANOVA with bootstrap CI
   age_perm <- lapply(levels(sample_data_df$AgeGroup), function(ag){
     idx <- sample_data_df$AgeGroup == ag
+    if (sum(idx) < 2) return(data.frame(AgeGroup = ag, F = NA, R2 = NA, P = NA, 
+                                        Df_num = NA, Df_denom = NA,
+                                        CI_lower = NA, CI_upper = NA))
     dist_sub <- as.dist(as.matrix(bray_dist)[idx, idx])
     grp_sub <- sample_data_df$Group[idx]
-    if(length(unique(grp_sub))>1){
+    if(length(unique(grp_sub)) > 1){
+      set.seed(12345 + comp_index + which(levels(sample_data_df$AgeGroup) == ag))
       ad_res <- adonis2(dist_sub ~ grp_sub, permutations=999)
-      data.frame(AgeGroup=ag, F=ad_res$F[1], R2=ad_res$R2[1], P=ad_res$`Pr(>F)`[1])
-    } else data.frame(AgeGroup=ag, F=NA, R2=NA, P=NA)
+      
+      # Bootstrap CI for age-stratified
+      ci_age <- tryCatch({
+        boot_r2_age <- function(data, indices) {
+          boot_dist <- as.dist(as.matrix(dist_sub)[indices, indices])
+          boot_group <- grp_sub[indices]
+          if (length(unique(boot_group)) < 2) return(NA)
+          ad <- adonis2(boot_dist ~ boot_group, permutations = 49)
+          return(ad$R2[1])
+        }
+        boot_result <- boot(data = 1:length(grp_sub), statistic = boot_r2_age, R = 199)
+        ci <- boot.ci(boot_result, type = "perc")
+        if (!is.null(ci)) c(ci$percent[4], ci$percent[5]) else c(NA, NA)
+      }, error = function(e) c(NA, NA))
+      
+      data.frame(AgeGroup = ag, 
+                 F = ad_res$F[1], 
+                 R2 = ad_res$R2[1], 
+                 P = ad_res$`Pr(>F)`[1],
+                 Df_num = ad_res$Df[1],
+                 Df_denom = ad_res$Df[length(ad_res$Df) - 1],
+                 CI_lower = ci_age[1],
+                 CI_upper = ci_age[2])
+    } else {
+      data.frame(AgeGroup = ag, F = NA, R2 = NA, P = NA,
+                 Df_num = NA, Df_denom = NA,
+                 CI_lower = NA, CI_upper = NA)
+    }
   })
   age_perm_df <- bind_rows(age_perm)
   
+  # PCoA ordination
   ordination <- ordinate(physeq_sub, method="PCoA", distance=bray_dist)
   pcoa_df <- plot_ordination(physeq_sub, ordination, type="samples", justDF=TRUE)
   pcoa_df$AgeGroup <- factor(pcoa_df$AgeGroup, levels = levels(metadata$AgeGroup))
@@ -119,121 +206,200 @@ analyze_group <- function(group_name, physeq_obj){
   x_breaks <- pretty(pcoa_df$Axis.1, n = 5)
   y_breaks <- pretty(pcoa_df$Axis.2, n = 5)
   
-  pcoa_plot <- ggplot(pcoa_df, aes(Axis.1, Axis.2, color=Group, shape=AgeGroup)) +
-    geom_point(size=3, alpha=0.7) +
-    scale_color_manual(values=group_colors) +
-    scale_shape_manual(values=age_shapes) +
+  # PCoA plot - compact style with subtitle on left, transparent points
+  pcoa_plot <- ggplot(pcoa_df, aes(Axis.1, Axis.2, fill=Group, shape=AgeGroup)) +
+    geom_point(size=3.5, alpha=0.5, color="black", stroke = 0.3) +
+    scale_fill_manual(values=group_colors, guide="none") +
+    scale_shape_manual(values=age_shapes, guide="none") +
     facet_wrap(~AgeGroup, labeller=labeller(AgeGroup=facet_labels), strip.position = "top") +
     scale_x_continuous(breaks = x_breaks) +
     scale_y_continuous(breaks = y_breaks) +
-    labs(title=paste0("D85 Not-Ill vs ", group_name),
-         subtitle=paste0("PERMANOVA p = ", signif(perm_res$`Pr(>F)`[1], 3)),
+    labs(subtitle=paste0(group_name, " vs D85 Not-Ill"),
          x=paste0("PCoA1 (", round(ordination$values$Relative_eig[1]*100,1), "%)"),
          y=paste0("PCoA2 (", round(ordination$values$Relative_eig[2]*100,1), "%)")) +
     theme_minimal(base_size = base_font_size) +
     theme(
-      legend.position = "bottom",
-      strip.text = element_text(size = base_font_size - 3, face = "plain", margin = margin(b = 6)),
+      plot.subtitle = element_text(size = base_font_size + 1, face = "plain", hjust = 0, margin = margin(b = 6)),
+      legend.position = "none",
+      strip.text = element_text(size = base_font_size - 3, face = "plain", margin = margin(b = 4)),
       strip.background = element_rect(fill = NA, colour = NA),
-      strip.placement = "outside",
-      plot.title = element_text(size = base_font_size + 2, face = "plain"),
-      plot.subtitle = element_text(size = base_font_size + 2, face = "plain"),
       panel.grid = element_blank(),
       axis.text.x = element_text(angle = 0, hjust = 0.5),
       axis.text.y = element_text(angle = 0, hjust = 0.5),
-      axis.line = element_line(size = 0.3, colour = "black"),
-      axis.ticks = element_line(size = 0.3),
-      axis.ticks.length = unit(-5, "pt"), # << inward ticks
-      plot.margin = margin(t = 8, r = 5, b = 5, l = 5),
-      panel.spacing = unit(1, "lines")
+      axis.line = element_line(color = "black", size = 0.3),
+      axis.ticks = element_line(color = "black", size = 0.3),
+      axis.ticks.length = unit(-2, "mm"),
+      plot.margin = margin(t = 2, r = 5, b = 2, l = 5),
+      panel.spacing = unit(0.4, "lines")
     )
   
+  # Distance to centroid plot with Kruskal–Wallis p as subtitle
   centroid_df <- data.frame(DistanceToCentroid = betadisp$distances, Group = sample_data_df$Group)
   centroid_df$Group <- factor(centroid_df$Group, levels=c("D85 Not-Ill", group_name))
   
   centroid_plot <- ggplot(centroid_df, aes(x=Group, y=DistanceToCentroid, fill=Group)) +
     geom_boxplot(alpha=0.8, outlier.shape=NA) +
     geom_jitter(width=0.15, alpha=0.6, color="black", size=1.8) +
-    scale_fill_manual(values=group_colors) +
-    labs(title="Distance to Centroid",
-         subtitle=paste0("Kruskal–Wallis p = ", signif(kw_res$p.value, 3)),
-         y="Distance to centroid", x=NULL) +
+    scale_fill_manual(values=group_colors, guide="none") +
+    labs(y="Distance to centroid",
+         x=NULL,
+         subtitle=paste0("Kruskal–Wallis p = ", signif(disp_p, 3))) +
     theme_minimal(base_size = base_font_size) +
     theme(
-      legend.position = "bottom",
+      legend.position = "none",
+      plot.subtitle = element_text(size = base_font_size - 2, hjust = 0.5, margin = margin(t = 0, b = 4)),
+      axis.line = element_line(color = "black", size = 0.3),
+      axis.ticks = element_line(color = "black", size = 0.3),
+      axis.ticks.length = unit(-2, "mm"),
       panel.grid = element_blank(),
-      axis.line = element_line(size = 0.3, colour = "black"),
-      axis.ticks = element_line(size = 0.3),
-      axis.ticks.length = unit(-5, "pt") # << inward ticks
+      plot.margin = margin(t = 2, r = 5, b = 2, l = 5)
     )
   
+  # Create Nature format strings
+  ci_text <- if (!is.na(ci_r2[1]) && !is.na(ci_r2[2])) {
+    paste0("[", sprintf("%.3f", ci_r2[1]), ", ", sprintf("%.3f", ci_r2[2]), "]")
+  } else {
+    "[CI not available]"
+  }
+  
+  nature_format <- paste0("F(", df_num, ", ", df_denom, ") = ", 
+                          sprintf("%.2f", f_stat), ", p = ", 
+                          sprintf("%.3f", p_val), ", R² = ", 
+                          sprintf("%.3f", r2), ", 95% CI ", ci_text)
+  
+  kruskal_format <- paste0("H(", kruskal_df, ") = ", 
+                           sprintf("%.2f", kruskal_stat), ", p = ", 
+                           sprintf("%.3f", disp_p))
+  
   list(pcoa_plot=pcoa_plot, centroid_plot=centroid_plot,
-       perm_results=perm_res, kw_disp=kw_res, age_perm_df=age_perm_df)
+       perm_results=perm_res, kw_disp=kw_res, age_perm_df=age_perm_df,
+       f_stat=f_stat, r2=r2, p_val=p_val, df_num=df_num, df_denom=df_denom,
+       ci_r2=ci_r2, kruskal_stat=kruskal_stat, kruskal_df=kruskal_df,
+       disp_p=disp_p, nature_format=nature_format, kruskal_format=kruskal_format)
 }
 
 # === Run Analyses ===
-recent_results <- analyze_group("Recent-Ill", physeq_rel)
-early_results <- analyze_group("Early-Ill", physeq_rel)
+message("Analysing Recent-Ill vs D85 Not-Ill")
+recent_results <- analyze_group("Recent-Ill", physeq_rel, comp_index = 1)
+message("Analysing Early-Ill vs D85 Not-Ill")
+early_results <- analyze_group("Early-Ill", physeq_rel, comp_index = 2)
 
 # === Combine Plots ===
-recent_combined <- (recent_results$pcoa_plot + recent_results$centroid_plot + patchwork::plot_layout(widths = c(3,1))) / 
-  patchwork::plot_spacer() + patchwork::plot_layout(heights = c(1,0.05)) & 
-  theme(legend.position = "bottom")
+recent_combined <- recent_results$pcoa_plot + recent_results$centroid_plot + 
+  plot_layout(widths=c(3,1))
+early_combined <- early_results$pcoa_plot + early_results$centroid_plot + 
+  plot_layout(widths=c(3,1))
 
-early_combined <- (early_results$pcoa_plot + early_results$centroid_plot + patchwork::plot_layout(widths = c(3,1))) / 
-  patchwork::plot_spacer() + patchwork::plot_layout(heights = c(1,0.05)) & 
-  theme(legend.position = "bottom")
+# === Create PERMANOVA text plot ===
+permanova_plot <- ggplot() +
+  labs(title = paste0("All Age Adjusted PERMANOVA p = ", signif(recent_results$p_val, 3))) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 21, face = "plain", hjust = 0.5),
+    plot.margin = margin(t = 10, r = 0, b = 10, l = 0)
+  )
 
-final_plot <- patchwork::wrap_plots(list(recent_combined, early_combined), ncol = 1)
+# === Combine all with compact spacing ===
+final_plot <- wrap_plots(
+  permanova_plot,
+  wrap_plots(list(recent_combined, early_combined), ncol = 1),
+  ncol = 1,
+  heights = c(0.06, 2)
+)
 
-# === Save PDF & EMF ===
-pdf("C:/Users/oofordile/Desktop/D85_BetaDiversity_IllComparisons_3facets_RecentTop.pdf", width = 19, height = 12)
+# === Save PDF & EMF (compact dimensions) ===
+pdf("C:/Users/oofordile/Desktop/D85_BetaDiversity_IllComparisons_3facets_RecentTop.pdf", width = 18, height = 10)
 print(final_plot)
 dev.off()
 
-emf("C:/Users/oofordile/Desktop/D85_BetaDiversity_IllComparisons_3facets_RecentTop.emf", width = 19, height = 12)
+emf("C:/Users/oofordile/Desktop/D85_BetaDiversity_IllComparisons_3facets_RecentTop.emf", width = 18, height = 10)
 print(final_plot)
 dev.off()
 
 # === Prepare CSV Outputs ===
-illness_groups <- c("Recent-Ill","Early-Ill")
-age_csv <- data.frame()
-overall_csv <- data.frame()
+illness_groups <- list(
+  list(name = "Recent-Ill", results = recent_results),
+  list(name = "Early-Ill", results = early_results)
+)
+
+results_summary <- list()
+age_stratified_results <- list()
 
 for(ill_group in illness_groups){
-  if(ill_group=="Recent-Ill") analysis_results <- recent_results else analysis_results <- early_results
-  perm <- analysis_results$perm_results
-  disp_p <- analysis_results$kw_disp$p.value
+  group_name <- ill_group$name
+  analysis_results <- ill_group$results
+  
+  # Overall results with Nature format
+  results_summary[[group_name]] <- data.frame(
+    Comparison = paste0(group_name, " vs D85 Not-Ill"),
+    PERMANOVA_Df_numerator = analysis_results$df_num,
+    PERMANOVA_Df_denominator = analysis_results$df_denom,
+    PERMANOVA_SumOfSqs = round(analysis_results$perm_results$SumOfSqs[1], 4),
+    PERMANOVA_R2 = round(analysis_results$r2, 4),
+    PERMANOVA_F = round(analysis_results$f_stat, 4),
+    PERMANOVA_P = round(analysis_results$p_val, 4),
+    R2_95CI_lower = round(analysis_results$ci_r2[1], 4),
+    R2_95CI_upper = round(analysis_results$ci_r2[2], 4),
+    `Kruskal-Wallis_H` = round(analysis_results$kruskal_stat, 4),
+    `Kruskal-Wallis_Df` = analysis_results$kruskal_df,
+    `Kruskal-Wallis_P` = round(analysis_results$disp_p, 4),
+    Nature_Format_PERMANOVA = analysis_results$nature_format,
+    Nature_Format_KruskalWallis = analysis_results$kruskal_format
+  )
+  
+  # Age-stratified with Nature format
   age_df <- analysis_results$age_perm_df
+  age_stratified_row <- data.frame(Comparison = paste0(group_name, " vs D85 Not-Ill"), stringsAsFactors = FALSE)
   
-  # Not age-stratified CSV
-  overall_csv <- rbind(overall_csv, data.frame(
-    Comparison = paste0(ill_group," vs D85 Not-Ill"),
-    PERMANOVA_Df = perm$Df[1],
-    PERMANOVA_SumOfSqs = round(perm$SumOfSqs[1],4),
-    PERMANOVA_R2 = round(perm$R2[1],4),
-    PERMANOVA_F = round(perm$F[1],4),
-    PERMANOVA_P = round(perm$`Pr(>F)`[1],4),
-    Kruskal_Wallis = round(disp_p,4)
-  ))
-  
-  # Age-stratified CSV
-  age_csv <- rbind(age_csv, data.frame(
-    Comparison = paste0(ill_group," vs D85 Not-Ill"),
-    `7–12 mo (F,R2,p)` = paste0(round(age_df$F[age_df$AgeGroup=="7 to 12 months"],4),",",
-                                round(age_df$R2[age_df$AgeGroup=="7 to 12 months"],4),",",
-                                round(age_df$P[age_df$AgeGroup=="7 to 12 months"],4)),
-    `1–2 yr (F,R2,p)` = paste0(round(age_df$F[age_df$AgeGroup=="1 to 2 years"],4),",",
-                               round(age_df$R2[age_df$AgeGroup=="1 to 2 years"],4),",",
-                               round(age_df$P[age_df$AgeGroup=="1 to 2 years"],4)),
-    `>2 yr (F,R2,p)` = paste0(round(age_df$F[age_df$AgeGroup=="plus 2 years"],4),",",
-                              round(age_df$R2[age_df$AgeGroup=="plus 2 years"],4),",",
-                              round(age_df$P[age_df$AgeGroup=="plus 2 years"],4))
-  ))
+  for (i in 1:nrow(age_df)) {
+    age_group <- age_df$AgeGroup[i]
+    f_val <- age_df$F[i]
+    r2_val <- age_df$R2[i]
+    p_val_age <- age_df$P[i]
+    df_n <- age_df$Df_num[i]
+    df_d <- age_df$Df_denom[i]
+    ci_l <- age_df$CI_lower[i]
+    ci_u <- age_df$CI_upper[i]
+    
+    if (is.na(f_val)) {
+      text_val <- "NA"
+    } else {
+      ci_text_age <- if (!is.na(ci_l) && !is.na(ci_u)) {
+        paste0("95% CI [", sprintf("%.3f", ci_l), ", ", sprintf("%.3f", ci_u), "]")
+      } else {
+        "95% CI [not available]"
+      }
+      text_val <- paste0("F(", df_n, ", ", df_d, ") = ", sprintf("%.2f", f_val), 
+                         ", p = ", sprintf("%.3f", p_val_age), 
+                         ", R² = ", sprintf("%.3f", r2_val), 
+                         ", ", ci_text_age)
+    }
+    
+    if (age_group == "7 to 12 months") age_stratified_row$`7–12 months` <- text_val
+    if (age_group == "1 to 2 years") age_stratified_row$`1–2 years` <- text_val
+    if (age_group == "plus 2 years") age_stratified_row$`>2 years` <- text_val
+  }
+  age_stratified_results[[group_name]] <- age_stratified_row
 }
 
 # === Write CSVs ===
+overall_csv <- do.call(rbind, results_summary)
+rownames(overall_csv) <- NULL
 write.csv(overall_csv, "C:/Users/oofordile/Desktop/PERMANOVA_Overall_4decimal.csv", row.names=FALSE)
+
+age_csv <- do.call(rbind, age_stratified_results)
+rownames(age_csv) <- NULL
+age_csv <- age_csv[, c("Comparison", "7–12 months", "1–2 years", ">2 years")]
 write.csv(age_csv, "C:/Users/oofordile/Desktop/PERMANOVA_AgeStratified_4decimal.csv", row.names=FALSE)
 
-cat("CSV files exported:\n- PERMANOVA_Overall_4decimal.csv\n- PERMANOVA_AgeStratified_4decimal.csv\n")
+cat("\nAll files saved:\n")
+cat("- D85_BetaDiversity_IllComparisons_3facets_RecentTop.pdf\n")
+cat("- D85_BetaDiversity_IllComparisons_3facets_RecentTop.emf\n")
+cat("- PERMANOVA_Overall_4decimal.csv\n")
+cat("- PERMANOVA_AgeStratified_4decimal.csv\n")
+cat("\nNature format columns added to both CSV files with full statistical reporting including:\n")
+cat("- F statistic with degrees of freedom\n")
+cat("- p-values\n")
+cat("- R² effect sizes\n")
+cat("- 95% Confidence Intervals (bootstrap-estimated)\n")
+cat("- Kruskal-Wallis H statistic with degrees of freedom for dispersion tests\n")
