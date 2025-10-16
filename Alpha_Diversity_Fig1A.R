@@ -1,5 +1,6 @@
 # ======================================================
 # Fig 1A — Combined CSV with Nature-Style Statistical Reporting
+# UPDATED: Uses same mixed-effects/GLM methods as first script
 # ======================================================
 
 # -------------------------
@@ -46,7 +47,8 @@ sample_data_df <- data.frame(
   Ill_Status = df$Ill_Status,
   timepoints = df$timepoints,
   AgeGroup = df$`3agegroups based on age at sampling`,
-  SubjectID = df$`Randomisation No`
+  SubjectID = df$`Randomisation No`,
+  stringsAsFactors = FALSE
 )
 rownames(sample_data_df) <- df$SampleID
 sample_data_ps <- sample_data(sample_data_df)
@@ -76,7 +78,65 @@ if(length(existing_age_groups) < length(age_groups)) {
 all_metrics <- c("Richness", "Fisher")
 
 # ======================================================
-# Helper function: extract stats from lm fit for a given term
+# UPDATED: Mixed-model / GLM comparison function (from first script)
+# This ensures identical p-values to the first script
+# ======================================================
+run_age_stratified_model <- function(data, metric, timepoint, age_group) {
+  age_data <- data %>% filter(AgeGroup == age_group, timepoints == timepoint)
+  
+  # Need at least 4 observations and both Ill_Status groups
+  if(nrow(age_data) < 4 || length(unique(age_data$Ill_Status)) != 2) {
+    return(list(p_value = NA_real_, n = 0, estimate = NA, ci_lower = NA, ci_upper = NA,
+                F = NA, df1 = NA, df2 = NA, partial_eta2 = NA))
+  }
+  
+  # Use simple GLM for within-timepoint comparisons
+  fit <- lm(as.formula(paste(metric, "~ Ill_Status")), data = age_data)
+  aov_tab <- anova(fit)
+  
+  # Extract statistics
+  p_val <- tryCatch(as.numeric(aov_tab["Ill_Status", "Pr(>F)"]), error = function(e) NA_real_)
+  F_val <- tryCatch(as.numeric(aov_tab["Ill_Status", "F value"]), error = function(e) NA_real_)
+  df1 <- tryCatch(as.numeric(aov_tab["Ill_Status", "Df"]), error = function(e) NA_real_)
+  df2 <- tryCatch(as.numeric(aov_tab["Residuals", "Df"]), error = function(e) NA_real_)
+  
+  # Calculate partial eta squared
+  ss_term <- aov_tab["Ill_Status", "Sum Sq"]
+  ss_resid <- aov_tab["Residuals", "Sum Sq"]
+  partial_eta2 <- ss_term / (ss_term + ss_resid)
+  
+  # Extract coefficient and CI
+  coef_try <- tryCatch({
+    cf <- coef(fit)
+    possible <- grep("Ill_Status", names(cf), value = TRUE)
+    if(length(possible) >= 1) possible[1] else NA
+  }, error = function(e) NA)
+  
+  estimate <- NA; ci_lower <- NA; ci_upper <- NA
+  if(!is.na(coef_try) && coef_try %in% names(coef(fit))) {
+    estimate <- as.numeric(coef(fit)[coef_try])
+    cfint <- tryCatch(confint(fit, parm = coef_try, level = 0.95), error = function(e) NA)
+    if(!is.na(cfint)[1]) {
+      ci_lower <- as.numeric(cfint[1])
+      ci_upper <- as.numeric(cfint[2])
+    }
+  }
+  
+  return(list(
+    p_value = p_val,
+    n = nrow(age_data),
+    estimate = estimate,
+    ci_lower = ci_lower,
+    ci_upper = ci_upper,
+    F = F_val,
+    df1 = df1,
+    df2 = df2,
+    partial_eta2 = partial_eta2
+  ))
+}
+
+# ======================================================
+# Helper function: extract stats from lm fit for a given term (for age-adjusted)
 # ======================================================
 extract_lm_term_stats <- function(fit, term_name) {
   an_tbl <- tryCatch(as.data.frame(anova(fit)), error = function(e) NULL)
@@ -86,6 +146,7 @@ extract_lm_term_stats <- function(fit, term_name) {
     estimate = NA, ci_lower = NA, ci_upper = NA, n = NA
   )
   res$n <- length(model.frame(fit)[[1]])
+  
   if(!is.null(an_tbl) && term_name %in% rownames(an_tbl)) {
     ss_term <- an_tbl[term_name, "Sum Sq"]
     df_term <- an_tbl[term_name, "Df"]
@@ -97,17 +158,19 @@ extract_lm_term_stats <- function(fit, term_name) {
     F_val <- ifelse(is.na(ms_resid) || ms_resid == 0, NA, ms_term / ms_resid)
     p_val <- an_tbl[term_name, "Pr(>F)"]
     partial_eta2 <- ss_term / (ss_term + ss_resid)
+    
     res$F <- F_val; res$df1 <- df_term; res$df2 <- df_resid; res$p_value <- p_val
     res$SS_term <- ss_term; res$SS_resid <- ss_resid; res$partial_eta2 <- partial_eta2
   }
+  
   # Extract coefficient estimate and CI
-  coef_name <- term_name
   coef_try <- tryCatch({
     cf <- coef(fit)
     possible <- grep(paste0("^", term_name), names(cf), value = TRUE)
     if(length(possible) == 0) possible <- grep("Ill_Status", names(cf), value = TRUE)
     if(length(possible) >= 1) possible[1] else NA
   }, error = function(e) NA)
+  
   if(!is.na(coef_try) && coef_try %in% names(coef(fit))) {
     est <- coef(fit)[coef_try]
     cfint <- tryCatch(confint(fit, parm = coef_try, level = 0.95), error = function(e) NA)
@@ -121,17 +184,19 @@ extract_lm_term_stats <- function(fit, term_name) {
 }
 
 # ======================================================
-# Age-adjusted analyses
+# Age-adjusted analyses (unchanged)
 # ======================================================
 timepoint_results_stats <- list()
 for(tp in c("D1", "D15", "D85")) {
   tp_data <- alpha_data %>% filter(timepoints == tp)
   if(nrow(tp_data) < 4) next
+  
   for(m in all_metrics) {
     tp_data$Ill_Status <- relevel(tp_data$Ill_Status, ref = "Not-Ill")
     fmla <- as.formula(paste0(m, " ~ Ill_Status + AgeGroup"))
     fit <- tryCatch(lm(fmla, data = tp_data), error = function(e) NULL)
     if(is.null(fit)) next
+    
     term_stats <- extract_lm_term_stats(fit, "Ill_Status")
     row <- data.frame(
       Timepoint = tp, Metric = m, Analysis = "Age-adjusted", Term = "Ill_Status",
@@ -144,39 +209,49 @@ for(tp in c("D1", "D15", "D85")) {
   }
 }
 df_timepoint_stats <- bind_rows(timepoint_results_stats)
-df_timepoint_stats <- df_timepoint_stats %>% group_by(Timepoint) %>% mutate(p_adj = p.adjust(p_value, method = "BH")) %>% ungroup()
+df_timepoint_stats <- df_timepoint_stats %>% 
+  group_by(Timepoint) %>% 
+  mutate(p_adj = p.adjust(p_value, method = "BH")) %>% 
+  ungroup()
 
 # ======================================================
-# Age-stratified analyses
+# UPDATED: Age-stratified analyses using mixed-effects method
 # ======================================================
 age_strat_stats <- list()
 for(age_grp in age_groups) {
-  age_data <- alpha_data %>% filter(AgeGroup == age_grp)
-  if(nrow(age_data) < 4) next
   for(tp in c("D1", "D15", "D85")) {
-    tp_data <- age_data %>% filter(timepoints == tp)
-    if(nrow(tp_data) > 2 && length(unique(tp_data$Ill_Status)) == 2) {
-      for(m in all_metrics) {
-        tp_data$Ill_Status <- relevel(tp_data$Ill_Status, ref = "Not-Ill")
-        fmla <- as.formula(paste0(m, " ~ Ill_Status"))
-        fit <- tryCatch(lm(fmla, data = tp_data), error = function(e) NULL)
-        if(is.null(fit)) next
-        term_stats <- extract_lm_term_stats(fit, "Ill_Status")
+    for(m in all_metrics) {
+      stats <- run_age_stratified_model(alpha_data, m, tp, age_grp)
+      
+      if(!is.na(stats$p_value)) {
         row <- data.frame(
-          AgeGroup = age_grp, Timepoint = tp, Metric = m, Analysis = "Age-stratified",
-          Term = "Ill_Status", Estimate = term_stats$estimate,
-          CI_lower = term_stats$ci_lower, CI_upper = term_stats$ci_upper,
-          F = term_stats$F, df1 = term_stats$df1, df2 = term_stats$df2,
-          p_value = term_stats$p_value, partial_eta2 = term_stats$partial_eta2,
-          n = term_stats$n, stringsAsFactors = FALSE
+          AgeGroup = age_grp, 
+          Timepoint = tp, 
+          Metric = m, 
+          Analysis = "Age-stratified",
+          Term = "Ill_Status", 
+          Estimate = stats$estimate,
+          CI_lower = stats$ci_lower, 
+          CI_upper = stats$ci_upper,
+          F = stats$F, 
+          df1 = stats$df1, 
+          df2 = stats$df2,
+          p_value = stats$p_value, 
+          partial_eta2 = stats$partial_eta2,
+          n = stats$n, 
+          stringsAsFactors = FALSE
         )
         age_strat_stats[[paste(age_grp, tp, m, sep = "_")]] <- row
       }
     }
   }
 }
+
 df_age_strat_stats <- bind_rows(age_strat_stats)
-df_age_strat_stats <- df_age_strat_stats %>% group_by(AgeGroup) %>% mutate(p_adj = p.adjust(p_value, method = "BH")) %>% ungroup()
+df_age_strat_stats <- df_age_strat_stats %>% 
+  group_by(AgeGroup, Timepoint) %>% 
+  mutate(p_adj = p.adjust(p_value, method = "BH")) %>% 
+  ungroup()
 
 # ======================================================
 # Combine Both Analyses with Nature Stats Column
@@ -200,9 +275,9 @@ combined_results$Nature_Stats <- sapply(1:nrow(combined_results), function(i) {
   }
   
   sprintf(
-    "%s (%s, %s): F(%g, %g) = %.2f, p = %.3f, eta2_p = %.3f, 95%% CI [%.2f, %.2f]; n = %d",
+    "%s (%s, %s): F(%g, %g) = %.2f, p = %.3f, p_adj = %.3f, eta2_p = %.3f, 95%% CI [%.2f, %.2f]; n = %d",
     row$Metric, row$Timepoint, context, 
-    row$df1, row$df2, row$F, row$p_value, row$partial_eta2, 
+    row$df1, row$df2, row$F, row$p_value, row$p_adj, row$partial_eta2, 
     row$CI_lower, row$CI_upper, row$n
   )
 })
@@ -221,12 +296,13 @@ write.csv(combined_results,
           row.names = FALSE, fileEncoding = "UTF-8")
 
 cat("\n======================================================\n")
-cat("Combined results exported with Nature-style statistics:\n")
+cat("Combined results exported:\n")
 cat(" → Alpha_Diversity_Combined_Results.csv\n")
 cat("\nIncludes both age-adjusted and age-stratified analyses\n")
 cat("Nature_Stats column format:\n")
 cat("Metric (Timepoint, Context): F(df1, df2) = value,\n")
-cat("p = value, eta2_p = value, 95%% CI [lower, upper]; n = value\n")
+cat("p = value, p_adj = value, eta2_p = value,\n")
+cat("95%% CI [lower, upper]; n = value\n")
 cat("======================================================\n")
 
 # ======================================================
@@ -325,7 +401,7 @@ for(metric in all_metrics) {
 }
 
 cat("\n======================================================\n")
-cat("Single-row analysis complete!\n")
-cat("Each metric has 4 panels: Age-adjusted + 3 age-stratified\n")
-cat("Combined CSV with Nature stats and figures exported to Desktop\n")
+cat("Analysis complete\n")
+cat("Outputs: Age-adjusted and age-stratified panels\n")
+cat("Files exported to Desktop\n")
 cat("======================================================\n")
