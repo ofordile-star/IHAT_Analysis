@@ -95,7 +95,7 @@ p_int_label <- paste0("Interaction p = ", signif(p_int, 3))
 
 # --- Aesthetics ---
 color_map <- c("Ill" = "#D73027", "Not-Ill" = "#1F78B4")  
-shape_map <- c("1to2years" = 16, "7to12 mths" = 17, "plus2years" = 15)
+shape_map <- c("1to2years" = 21, "7to12 mths" = 22, "plus2years" = 24)
 
 pcoa_placebo <- pcoa_df %>% filter(Iron_Treatment == "placebo")
 pcoa_treatment <- pcoa_df %>% filter(Iron_Treatment == "treatment")
