@@ -356,7 +356,18 @@ emf("C:/Users/oofordile/Desktop/D85_BetaDiversity_IllComparisons_FDR.emf", width
 print(final_plot)
 dev.off()
 
-# === Prepare CSV Outputs with FDR ===
+# === Helper function to format numbers appropriately ===
+format_number <- function(x, digits = 4) {
+  if (is.na(x)) return(NA)
+  if (x == 0) return("0.0000")  # Explicit zero
+  if (x < 0.0001) {
+    return(formatC(x, format = "e", digits = 2))
+  } else {
+    return(sprintf(paste0("%.", digits, "f"), x))
+  }
+}
+
+# === Prepare CSV Outputs with Proper Formatting ===
 illness_groups <- list(
   list(name = "Recent-Ill", results = recent_results),
   list(name = "Early-Ill", results = early_results)
@@ -369,47 +380,56 @@ for(ill_group in illness_groups){
   group_name <- ill_group$name
   analysis_results <- ill_group$results
   
-  # Create Nature format strings with FDR
+  # Format confidence intervals
   ci_text <- if (!is.na(analysis_results$ci_r2[1]) && !is.na(analysis_results$ci_r2[2])) {
-    paste0("[", sprintf("%.3f", analysis_results$ci_r2[1]), ", ", sprintf("%.3f", analysis_results$ci_r2[2]), "]")
+    paste0("[", format_number(analysis_results$ci_r2[1]), ", ", 
+           format_number(analysis_results$ci_r2[2]), "]")
   } else {
     "[CI not available]"
   }
   
+  # Format p-values for Nature format string
+  p_formatted <- format_number(analysis_results$p_val)
+  p_fdr_formatted <- format_number(analysis_results$p_val_fdr)
+  r2_formatted <- format_number(analysis_results$r2)
+  
   nature_format <- paste0("F(", analysis_results$df_num, ", ", analysis_results$df_denom, ") = ", 
-                          sprintf("%.2f", analysis_results$f_stat), ", p = ", 
-                          sprintf("%.3f", analysis_results$p_val), ", FDR p = ",
-                          sprintf("%.3f", analysis_results$p_val_fdr), ", R² = ", 
-                          sprintf("%.3f", analysis_results$r2), ", 95% CI ", ci_text)
+                          format_number(analysis_results$f_stat, 2), ", p = ", p_formatted, 
+                          ", FDR p = ", p_fdr_formatted, ", R² = ", r2_formatted, 
+                          ", 95% CI ", ci_text)
+  
+  kruskal_p_formatted <- format_number(analysis_results$disp_p)
+  kruskal_p_fdr_formatted <- format_number(analysis_results$disp_p_fdr)
   
   kruskal_format <- paste0("H(", analysis_results$kruskal_df, ") = ", 
-                           sprintf("%.2f", analysis_results$kruskal_stat), ", p = ", 
-                           sprintf("%.3f", analysis_results$disp_p), ", FDR p = ",
-                           sprintf("%.3f", analysis_results$disp_p_fdr))
+                           format_number(analysis_results$kruskal_stat, 2), ", p = ", 
+                           kruskal_p_formatted, ", FDR p = ", kruskal_p_fdr_formatted)
   
-  # Overall results with FDR
+  # Overall results with formatted numbers
   results_summary[[group_name]] <- data.frame(
     Comparison = paste0(group_name, " vs D85 Not-Ill"),
     PERMANOVA_Df_numerator = analysis_results$df_num,
     PERMANOVA_Df_denominator = analysis_results$df_denom,
-    PERMANOVA_SumOfSqs = round(analysis_results$perm_res$SumOfSqs[1], 4),
-    PERMANOVA_R2 = round(analysis_results$r2, 4),
-    PERMANOVA_F = round(analysis_results$f_stat, 4),
-    PERMANOVA_P = round(analysis_results$p_val, 4),
-    PERMANOVA_P_FDR = round(analysis_results$p_val_fdr, 4),
-    R2_95CI_lower = round(analysis_results$ci_r2[1], 4),
-    R2_95CI_upper = round(analysis_results$ci_r2[2], 4),
-    `Kruskal-Wallis_H` = round(analysis_results$kruskal_stat, 4),
+    PERMANOVA_SumOfSqs = format_number(analysis_results$perm_res$SumOfSqs[1]),
+    PERMANOVA_R2 = format_number(analysis_results$r2),
+    PERMANOVA_F = format_number(analysis_results$f_stat),
+    PERMANOVA_P = format_number(analysis_results$p_val),
+    PERMANOVA_P_FDR = format_number(analysis_results$p_val_fdr),
+    R2_95CI_lower = format_number(analysis_results$ci_r2[1]),
+    R2_95CI_upper = format_number(analysis_results$ci_r2[2]),
+    `Kruskal-Wallis_H` = format_number(analysis_results$kruskal_stat),
     `Kruskal-Wallis_Df` = analysis_results$kruskal_df,
-    `Kruskal-Wallis_P` = round(analysis_results$disp_p, 4),
-    `Kruskal-Wallis_P_FDR` = round(analysis_results$disp_p_fdr, 4),
+    `Kruskal-Wallis_P` = format_number(analysis_results$disp_p),
+    `Kruskal-Wallis_P_FDR` = format_number(analysis_results$disp_p_fdr),
     Nature_Format_PERMANOVA = nature_format,
-    Nature_Format_KruskalWallis = kruskal_format
+    Nature_Format_KruskalWallis = kruskal_format,
+    stringsAsFactors = FALSE
   )
   
-  # Age-stratified with FDR
+  # Age-stratified with formatted numbers
   age_df <- analysis_results$age_perm_df
-  age_stratified_row <- data.frame(Comparison = paste0(group_name, " vs D85 Not-Ill"), stringsAsFactors = FALSE)
+  age_stratified_row <- data.frame(Comparison = paste0(group_name, " vs D85 Not-Ill"), 
+                                   stringsAsFactors = FALSE)
   
   for (i in 1:nrow(age_df)) {
     age_group <- age_df$AgeGroup[i]
@@ -426,14 +446,15 @@ for(ill_group in illness_groups){
       text_val <- "NA"
     } else {
       ci_text_age <- if (!is.na(ci_l) && !is.na(ci_u)) {
-        paste0("95% CI [", sprintf("%.3f", ci_l), ", ", sprintf("%.3f", ci_u), "]")
+        paste0("95% CI [", format_number(ci_l), ", ", format_number(ci_u), "]")
       } else {
         "95% CI [not available]"
       }
-      text_val <- paste0("F(", df_n, ", ", df_d, ") = ", sprintf("%.2f", f_val), 
-                         ", p = ", sprintf("%.3f", p_val_age),
-                         ", FDR p = ", sprintf("%.3f", p_fdr_age),
-                         ", R² = ", sprintf("%.3f", r2_val), 
+      
+      text_val <- paste0("F(", df_n, ", ", df_d, ") = ", format_number(f_val, 2), 
+                         ", p = ", format_number(p_val_age),
+                         ", FDR p = ", format_number(p_fdr_age),
+                         ", R² = ", format_number(r2_val), 
                          ", ", ci_text_age)
     }
     
@@ -454,6 +475,11 @@ rownames(age_csv) <- NULL
 age_csv <- age_csv[, c("Comparison", "7–12 months", "1–2 years", ">2 years")]
 write.csv(age_csv, "C:/Users/oofordile/Desktop/PERMANOVA_AgeStratified_FDR.csv", row.names=FALSE)
 
+cat("\n=== CSV Formatting Rules Applied ===\n")
+cat("Numbers formatted as:\n")
+cat("- 4 decimal places for values >= 0.0001\n")
+cat("- Scientific notation (e.g., 1.23e-05) for values < 0.0001\n")
+cat("- No cells contain just '0'\n")
 cat("\n=== Analysis Complete ===\n")
 cat("All files saved:\n")
 cat("- D85_BetaDiversity_IllComparisons_FDR.pdf\n")
