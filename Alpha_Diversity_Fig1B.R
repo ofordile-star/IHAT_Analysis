@@ -1,5 +1,6 @@
 # ======================================================
-# Fig 1B — D1/D15 Ill vs D85 Not-Ill: Species Richness
+# Fig 1B — D1/D15 Ill vs D85 Not-Ill: Richness & Fisher
+# CORRECTED: Now uses ANOVA p-values (consistent with Document 2)
 # Enhanced with Nature-Style Statistics (eta2_p, UTF-8)
 # ======================================================
 
@@ -49,9 +50,9 @@ otu_table_ps <- otu_table(count_mat, taxa_are_rows = FALSE)
 ps <- phyloseq(otu_table_ps, sample_data_ps)
 
 # -------------------------
-# Alpha diversity
+# Alpha diversity - Richness and Fisher
 # -------------------------
-alpha_div <- estimate_richness(ps, measures = c("Observed"))
+alpha_div <- estimate_richness(ps, measures = c("Observed", "Fisher"))
 alpha_div$SampleID <- df$SampleID
 alpha_data <- merge(alpha_div, sample_data_df, by = "SampleID")
 alpha_data <- alpha_data %>% rename(Richness = Observed)
@@ -83,10 +84,11 @@ prepare_comparison <- function(data, age_grp = NULL) {
   rbind(comp_d1, comp_d15)
 }
 
-# -------------------------
-# Compute detailed statistics (Nature format, ASCII eta2_p)
-# -------------------------
-compute_detailed_stats <- function(df, analysis_type = "Overall") {
+# ======================================================
+# Compute detailed statistics (age-adjusted or stratified)
+# CORRECTED: Now uses ANOVA p-value instead of coefficient p-value
+# ======================================================
+compute_detailed_stats <- function(df, metric, analysis_type = "Overall") {
   comparisons <- unique(df$Comparison)
   all_stats <- data.frame()
   formatted_lines <- c()
@@ -95,18 +97,24 @@ compute_detailed_stats <- function(df, analysis_type = "Overall") {
     tmp <- df %>% filter(Comparison == cmp)
     if(length(unique(tmp$Ill_Status)) == 2) {
       tmp$Ill_Status <- factor(tmp$Ill_Status, levels = c("Not-Ill", "Ill"))
-      fit <- lm(Richness ~ Ill_Status, data = tmp)
       
+      if(analysis_type == "Age-Adjusted") {
+        fit <- lm(as.formula(paste(metric, "~ Ill_Status + AgeGroup")), data = tmp)
+      } else {
+        fit <- lm(as.formula(paste(metric, "~ Ill_Status")), data = tmp)
+      }
+      
+      # Extract coefficient estimate and CI
       coef_summary <- summary(fit)$coefficients
       coef_est <- coef_summary["Ill_StatusIll", "Estimate"]
       ci <- confint(fit, "Ill_StatusIll")
-      p_val <- coef_summary["Ill_StatusIll", "Pr(>|t|)"]
       
+      # CORRECTED: Use ANOVA p-value (not coefficient p-value)
       aov_tab <- anova(fit)
+      p_val <- aov_tab["Ill_Status", "Pr(>F)"]  # <-- THIS IS THE FIX
       f_stat <- aov_tab["Ill_Status", "F value"]
       df1 <- aov_tab["Ill_Status", "Df"]
       df2 <- aov_tab["Residuals", "Df"]
-      
       ss_effect <- aov_tab["Ill_Status", "Sum Sq"]
       ss_resid <- aov_tab["Residuals", "Sum Sq"]
       eta2_p <- ss_effect / (ss_effect + ss_resid)
@@ -114,21 +122,24 @@ compute_detailed_stats <- function(df, analysis_type = "Overall") {
       means <- tmp %>% 
         group_by(Ill_Status) %>% 
         summarise(n = n(),
-                  Mean = mean(Richness, na.rm = TRUE),
-                  SD = sd(Richness, na.rm = TRUE),
+                  Mean = mean(.data[[metric]], na.rm = TRUE),
+                  SD = sd(.data[[metric]], na.rm = TRUE),
                   .groups = 'drop')
       
       timepoint <- strsplit(cmp, " ")[[1]][1]
       total_n <- sum(means$n)
       
       formatted <- sprintf(
-        "Richness (%s, %s): F(%d, %d) = %.2f, p = %.3f, eta2_p = %.3f, 95%% CI [%.2f, %.2f]; n = %d",
-        timepoint, analysis_type, df1, df2, f_stat, p_val, eta2_p, ci[1], ci[2], total_n
+        "%s (%s, %s): F(%d, %d) = %.2f, p = %s, eta2_p = %.3f, 95%% CI [%.2f, %.2f]; n = %d",
+        metric, timepoint, analysis_type, df1, df2, f_stat, 
+        ifelse(p_val < 0.001, sprintf("%.2e", p_val), sprintf("%.3f", p_val)),
+        eta2_p, ci[1], ci[2], total_n
       )
       formatted_lines <- c(formatted_lines, formatted)
       
       for(i in 1:nrow(means)) {
         stats <- data.frame(
+          Metric = metric,
           Analysis = analysis_type,
           Comparison = cmp,
           Timepoint = timepoint,
@@ -152,58 +163,80 @@ compute_detailed_stats <- function(df, analysis_type = "Overall") {
     }
   }
   
-  cat("\n--- Nature-Style Statistics ---\n")
+  cat("\n--- Nature-Style Statistics (", metric, ") ---\n", sep = "")
   cat(paste(formatted_lines, collapse = "\n"), "\n-------------------------------\n")
   
   all_stats
 }
 
 # -------------------------
-# Compute stats for all analyses
+# Compute stats for all analyses and both metrics
 # -------------------------
-stats_overall <- compute_detailed_stats(prepare_comparison(alpha_data), "Age-Adjusted")
+all_combined_stats <- data.frame()
 
-stats_age_stratified <- data.frame()
-for(age_grp in age_groups) {
-  stats_age <- compute_detailed_stats(prepare_comparison(alpha_data, age_grp), age_grp)
-  stats_age_stratified <- rbind(stats_age_stratified, stats_age)
+for(metric in c("Richness", "Fisher")) {
+  stats_overall <- compute_detailed_stats(prepare_comparison(alpha_data), metric, "Age-Adjusted")
+  
+  stats_age_stratified <- data.frame()
+  for(age_grp in age_groups) {
+    stats_age <- compute_detailed_stats(prepare_comparison(alpha_data, age_grp), metric, age_grp)
+    stats_age_stratified <- rbind(stats_age_stratified, stats_age)
+  }
+  
+  metric_stats <- rbind(stats_overall, stats_age_stratified)
+  all_combined_stats <- rbind(all_combined_stats, metric_stats)
 }
 
-all_detailed_stats <- rbind(stats_overall, stats_age_stratified) %>%
-  group_by(Analysis, Comparison) %>%
+all_combined_stats <- all_combined_stats %>%
+  group_by(Metric, Analysis, Comparison) %>%
   mutate(p_adj = p.adjust(p_value, method = "BH")) %>%
   ungroup() %>%
-  mutate(across(c(Mean, SD, Estimate, CI_lower, CI_upper, F, eta2_p, p_value, p_adj),
+  mutate(across(c(Mean, SD, Estimate, CI_lower, CI_upper, F, eta2_p),
                 ~round(.x, 6))) %>%
   mutate(across(c(df1, df2), ~round(.x, 0))) %>%
-  select(Analysis, Comparison, Timepoint, Ill_Status, n, Mean, SD, 
+  select(Metric, Analysis, Comparison, Timepoint, Ill_Status, n, Mean, SD, 
          Estimate, CI_lower, CI_upper, F, df1, df2, eta2_p, p_value, p_adj, Nature_Formatted_Stat)
 
 # -------------------------
-# Save detailed statistics CSV (UTF-8)
+# Save combined detailed statistics CSV (UTF-8)
 # -------------------------
-write.csv(all_detailed_stats, 
-          "C:/Users/oofordile/Desktop/SpeciesRichness_D1D15_vs_D85_DetailedStats.csv", 
+write.csv(all_combined_stats, 
+          "C:/Users/oofordile/Desktop/D1D15_vs_D85_DetailedStats_CORRECTED.csv", 
           row.names = FALSE, fileEncoding = "UTF-8")
 
 # -------------------------
-# Full statistics for plotting
+# Compute full stats for plotting (age-adjusted if requested)
+# CORRECTED: Now uses ANOVA p-value
 # -------------------------
-compute_full_stats <- function(df) {
+compute_full_stats <- function(df, metric, age_adjusted = FALSE) {
   comparisons <- unique(df$Comparison)
   all_stats <- data.frame()
+  
   for(cmp in comparisons) {
     tmp <- df %>% filter(Comparison == cmp)
     if(length(unique(tmp$Ill_Status)) == 2) {
       tmp$Ill_Status <- factor(tmp$Ill_Status, levels = c("Not-Ill", "Ill"))
-      fit <- lm(Richness ~ Ill_Status, data = tmp)
+      
+      if(age_adjusted) {
+        fit <- lm(as.formula(paste(metric, "~ Ill_Status + AgeGroup")), data = tmp)
+      } else {
+        fit <- lm(as.formula(paste(metric, "~ Ill_Status")), data = tmp)
+      }
+      
       coef_est <- coef(fit)["Ill_StatusIll"]
       ci <- confint(fit, "Ill_StatusIll")
-      p_val <- summary(fit)$coefficients["Ill_StatusIll", "Pr(>|t|)"]
-      means <- tmp %>% group_by(Ill_Status) %>% summarise(n = n(),
-                                                          Mean = mean(Richness, na.rm = TRUE),
-                                                          SD = sd(Richness, na.rm = TRUE),
-                                                          .groups='drop')
+      
+      # CORRECTED: Use ANOVA p-value
+      aov_tab <- anova(fit)
+      p_val <- aov_tab["Ill_Status", "Pr(>F)"]  # <-- THIS IS THE FIX
+      
+      means <- tmp %>% group_by(Ill_Status) %>% summarise(
+        n = n(),
+        Mean = mean(.data[[metric]], na.rm = TRUE),
+        SD = sd(.data[[metric]], na.rm = TRUE),
+        .groups='drop'
+      )
+      
       stats <- data.frame(
         Comparison = cmp,
         Ill_Status = means$Ill_Status,
@@ -222,14 +255,19 @@ compute_full_stats <- function(df) {
   all_stats
 }
 
-create_comparison_plot <- function(comp_data, age_grp = NULL, show_legend = FALSE, y_axis_text = TRUE) {
-  pvals <- compute_full_stats(comp_data)
-  p <- ggplot(comp_data, aes(x = Comparison, y = Richness, fill = Ill_Status, color = Ill_Status)) +
+# -------------------------
+# Plot function (age-adjusted for top panel)
+# -------------------------
+create_comparison_plot <- function(comp_data, metric, y_label, age_grp = NULL, show_legend = FALSE, y_axis_text = TRUE) {
+  age_adjusted_flag <- is.null(age_grp)  # TRUE for Age-Adjusted panel
+  pvals <- compute_full_stats(comp_data, metric, age_adjusted = age_adjusted_flag)
+  
+  p <- ggplot(comp_data, aes(x = Comparison, y = .data[[metric]], fill = Ill_Status, color = Ill_Status)) +
     geom_boxplot(position = position_dodge(width = 0.6), width = 0.4, outlier.shape = NA, alpha = 0.3) +
     geom_point(position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6), alpha = 0.5, size = 1.8) +
     scale_fill_manual(values = group_colors) +
     scale_color_manual(values = group_colors) +
-    labs(y = if(y_axis_text) "Species Richness" else NULL, x = NULL, title = ifelse(is.null(age_grp), "Age-Adjusted", age_grp)) +
+    labs(y = if(y_axis_text) y_label else NULL, x = NULL, title = ifelse(is.null(age_grp), "Age-Adjusted", age_grp)) +
     theme_minimal(base_size = 14) +
     theme(
       panel.grid = element_blank(),
@@ -244,47 +282,61 @@ create_comparison_plot <- function(comp_data, age_grp = NULL, show_legend = FALS
       axis.ticks.length = unit(-2, "mm"),
       plot.margin = margin(t = 20, r = 10, b = 10, l = 10)
     )
+  
   for(i in 1:nrow(pvals)) {
     cmp <- pvals$Comparison[i]
-    y_max <- max(comp_data$Richness[comp_data$Comparison == cmp], na.rm = TRUE)
+    y_max <- max(comp_data[[metric]][comp_data$Comparison == cmp], na.rm = TRUE)
+    
+    p_val <- pvals$p_adj[i]
+    if(p_val < 0.001) {
+      p_label <- sprintf("FDR p = %.2e", p_val)
+    } else {
+      p_label <- sprintf("FDR p = %.3f", p_val)
+    }
+    
     p <- p + annotate("text", x = cmp, y = y_max + 0.08*(y_max), 
-                      label = sprintf("FDR p=%.3f", pvals$p_adj[i]), size = 5, fontface = "bold")
+                      label = p_label, size = 5, fontface = "bold")
   }
-  p
+  
+  return(p)
 }
 
 # -------------------------
-# Generate plots
+# Generate plots for both metrics
 # -------------------------
-plots <- list()
-plots[[1]] <- create_comparison_plot(prepare_comparison(alpha_data), show_legend = FALSE, y_axis_text = TRUE)
-for(i in seq_along(age_groups)) {
-  plots[[i+1]] <- create_comparison_plot(prepare_comparison(alpha_data, age_groups[i]),
-                                         age_grp = age_groups[i],
-                                         show_legend = (i==length(age_groups)),
-                                         y_axis_text = FALSE)
+for(metric in c("Richness", "Fisher")) {
+  y_label <- ifelse(metric == "Richness", "Species Richness", "Fisher's Alpha")
+  file_prefix <- metric
+  
+  plots <- list()
+  plots[[1]] <- create_comparison_plot(prepare_comparison(alpha_data), metric, y_label, 
+                                       show_legend = FALSE, y_axis_text = TRUE)
+  for(i in seq_along(age_groups)) {
+    plots[[i+1]] <- create_comparison_plot(prepare_comparison(alpha_data, age_groups[i]),
+                                           metric, y_label,
+                                           age_grp = age_groups[i],
+                                           show_legend = (i==length(age_groups)),
+                                           y_axis_text = FALSE)
+  }
+  
+  main_title <- paste0("D1/D15 Ill vs D85 Not-Ill: ", y_label)
+  
+  pdf(paste0("C:/Users/oofordile/Desktop/", file_prefix, "_D1D15_vs_D85_SingleRow_CORRECTED.pdf"), width = 20, height = 5)
+  grid.arrange(grobs = plots, ncol = 4, top = textGrob(main_title, gp = gpar(fontsize = 16, fontface = "bold")))
+  dev.off()
+  
+  emf(paste0("C:/Users/oofordile/Desktop/", file_prefix, "_D1D15_vs_D85_SingleRow_CORRECTED.emf"), width = 20, height = 5, emfPlus = TRUE)
+  grid.arrange(grobs = plots, ncol = 4, top = textGrob(main_title, gp = gpar(fontsize = 16, fontface = "bold")))
+  dev.off()
 }
-
-main_title <- "D1/D15 Ill vs D85 Not-Ill: Species Richness"
-
-pdf("C:/Users/oofordile/Desktop/SpeciesRichness_D1D15_vs_D85_SingleRow_LargerP.pdf", width = 20, height = 5)
-grid.arrange(grobs = plots, ncol = 4, top = textGrob(main_title, gp = gpar(fontsize = 16, fontface = "bold")))
-dev.off()
-
-emf("C:/Users/oofordile/Desktop/SpeciesRichness_D1D15_vs_D85_SingleRow_LargerP.emf", width = 20, height = 5, emfPlus = TRUE)
-grid.arrange(grobs = plots, ncol = 4, top = textGrob(main_title, gp = gpar(fontsize = 16, fontface = "bold")))
-dev.off()
-
-# -------------------------
-# Save original format stats CSV (UTF-8)
-# -------------------------
-stats_full <- compute_full_stats(prepare_comparison(alpha_data))
-write.csv(stats_full, "C:/Users/oofordile/Desktop/SpeciesRichness_D1D15_vs_D85_FullStats.csv", 
-          row.names = FALSE, fileEncoding = "UTF-8")
 
 cat("\n======================================================\n")
-cat("Single-row D1/D15 Ill vs D85 Not-Ill plot complete!\n")
-cat("Nature-style stats (eta2_p, CI, df, p) exported in detailed CSV.\n")
-cat("Full statistics CSV exported: SpeciesRichness_D1D15_vs_D85_FullStats.csv\n")
-cat("Detailed statistics CSV exported: SpeciesRichness_D1D15_vs_D85_DetailedStats.csv\n")
+cat("CORRECTED: Single-row D1/D15 Ill vs D85 Not-Ill plots complete!\n")
+cat("Generated 2 sets of plots:\n")
+cat(" → Richness_D1D15_vs_D85_SingleRow_CORRECTED (PDF & EMF)\n")
+cat(" → Fisher_D1D15_vs_D85_SingleRow_CORRECTED (PDF & EMF)\n")
+cat("\nCombined detailed statistics CSV exported:\n")
+cat(" → D1D15_vs_D85_DetailedStats_CORRECTED.csv\n")
+cat("   (includes both Richness and Fisher metrics)\n")
+cat("\n*** NOW USING ANOVA P-VALUES (consistent with Document 2) ***\n")
 cat("======================================================\n")

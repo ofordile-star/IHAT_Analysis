@@ -243,12 +243,16 @@ write.csv(all_detailed_results,
           row.names = FALSE)
 
 # ======================================================
-# Export condensed FDR summary (4 decimal places)
+# Export condensed FDR summary with smart formatting
+# Replace lines 217-229 in Document 2
 # ======================================================
 fdr_summary <- all_detailed_results %>%
   select(Comparison, Metric, p_adj) %>%
-  pivot_wider(names_from = Metric, values_from = p_adj) %>%
-  mutate(across(-Comparison, ~ round(., 4))) %>%
+  mutate(p_adj_formatted = ifelse(p_adj < 0.001, 
+                                  sprintf("%.2e", p_adj), 
+                                  sprintf("%.4f", p_adj))) %>%
+  select(-p_adj) %>%
+  pivot_wider(names_from = Metric, values_from = p_adj_formatted) %>%
   rename(
     `p adj Richness` = Richness,
     `p adj Shannon` = Shannon,

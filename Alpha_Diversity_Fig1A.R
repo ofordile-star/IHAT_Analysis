@@ -320,8 +320,9 @@ all_timepoint_results_by_age <- combined_results %>%
   dplyr::select(AgeGroup, Timepoint, Metric, p_value, p_adj, n, Estimate, CI_lower, CI_upper, F, df1, df2, partial_eta2)
 
 # ======================================================
-# Plotting Functions
+# Updated create_condensed_plot function with improved p-value formatting
 # ======================================================
+
 create_condensed_plot <- function(data, metric, y_label, colors, results_df, title_text, 
                                   show_legend = FALSE, age_grp = NULL, y_axis_text = TRUE) {
   if(!is.null(age_grp)) {
@@ -361,11 +362,37 @@ create_condensed_plot <- function(data, metric, y_label, colors, results_df, tit
   if(nrow(stats_df) > 0){
     for(i in 1:nrow(stats_df)) {
       tp_pos <- which(levels(data$timepoints) == stats_df$Timepoint[i])
-      p_label <- sprintf("FDR p = %.3f", stats_df$p_adj[i])
-      p <- p + annotate("text", x = tp_pos, y = anno_y, label = p_label, size = 4.5, fontface = "bold")
+      
+      # Format p-value: use scientific notation if < 0.001, otherwise 3 decimal places
+      p_val <- stats_df$p_adj[i]
+      if(p_val < 0.001) {
+        p_label <- sprintf("FDR p = %.2e", p_val)
+      } else {
+        p_label <- sprintf("FDR p = %.3f", p_val)
+      }
+      
+      # Stagger annotation heights to prevent overlap
+      # Adjust y position based on timepoint index
+      anno_offset <- (tp_pos - 2) * 0.06 * y_diff  # Stagger vertically
+      anno_y_adjusted <- anno_y + anno_offset
+      
+      p <- p + annotate("text", x = tp_pos, y = anno_y_adjusted, label = p_label, 
+                        size = 4.5, fontface = "bold")
     }
   }
   return(p)
+}
+
+# ======================================================
+# Helper function to format p-values for console output
+# ======================================================
+format_p_value <- function(p) {
+  if(is.na(p)) return("NA")
+  if(p < 0.001) {
+    return(sprintf("%.2e", p))
+  } else {
+    return(sprintf("%.3f", p))
+  }
 }
 
 # ======================================================
