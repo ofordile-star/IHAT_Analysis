@@ -90,6 +90,9 @@ run_age_stratified_model <- function(data, metric, timepoint, age_group) {
                 F = NA, df1 = NA, df2 = NA, partial_eta2 = NA))
   }
   
+  # Set reference level to match age-adjusted analysis
+  age_data$Ill_Status <- relevel(age_data$Ill_Status, ref = "Not-Ill")
+  
   # Use simple GLM for within-timepoint comparisons
   fit <- lm(as.formula(paste(metric, "~ Ill_Status")), data = age_data)
   aov_tab <- anova(fit)

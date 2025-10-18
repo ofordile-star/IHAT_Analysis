@@ -13,6 +13,18 @@ library(cowplot)
 library(boot)
 
 # ======================================================
+# Helper Function for P-value Formatting
+# ======================================================
+format_p <- function(p, threshold = 0.001) {
+  if (is.na(p)) return("NA")
+  if (p >= threshold) {
+    return(sprintf("%.3f", p))
+  } else {
+    return(format(p, scientific = TRUE, digits = 3))
+  }
+}
+
+# ======================================================
 # File Paths (will be overwritten)
 # ======================================================
 microbiome_path <- "C:/Users/oofordile/Desktop/Merged_Illness_Cohorts.csv"
@@ -304,8 +316,8 @@ for (ill_group in names(all_age_pvals)) {
 
 cat("Overall PERMANOVA p-values (FDR-corrected):\n")
 for (ill_group in names(results_summary)) {
-  cat("  ", ill_group, ": raw p =", signif(results_summary[[ill_group]]$p_val, 3), 
-      ", FDR-adjusted p =", signif(all_overall_fdr[ill_group], 3), "\n")
+  cat("  ", ill_group, ": raw p =", format_p(results_summary[[ill_group]]$p_val), 
+      ", FDR-adjusted p =", format_p(all_overall_fdr[ill_group]), "\n")
 }
 
 # ======================================================
@@ -319,7 +331,7 @@ for (ill_group in names(results_summary)) {
   
   # Facet labels with FDR-corrected p-values
   facet_labels <- setNames(
-    paste0(age_perm_df$AgeGroup, " (FDR p = ", signif(age_perm_df$AgeGroup_PERMANOVA_P_FDR, 3), ")"), 
+    paste0(age_perm_df$AgeGroup, " (FDR p = ", sapply(age_perm_df$AgeGroup_PERMANOVA_P_FDR, format_p), ")"), 
     age_perm_df$AgeGroup
   )
   
@@ -362,7 +374,7 @@ for (ill_group in names(results_summary)) {
     geom_jitter(width = 0.15, alpha = 0.6, color = "black", size = 1.8) +
     scale_fill_manual(values = group_colors, na.value = "gray50") +
     labs(y = "Distance to centroid", x = NULL,
-         subtitle = paste0("Kruskal–Wallis FDR p = ", signif(disp_p_fdr, 3))) +
+         subtitle = paste0("Kruskal–Wallis FDR p = ", format_p(disp_p_fdr))) +
     theme_minimal(base_size = base_font_size) +
     theme(
       legend.position = "none",
@@ -397,14 +409,14 @@ for (ill_group in names(results_summary)) {
   
   nature_format <- paste0("F(", res$df_num, ", ", res$df_denom, ") = ", 
                           sprintf("%.2f", res$f_stat), ", p = ", 
-                          sprintf("%.3f", res$p_val), ", FDR p = ",
-                          sprintf("%.3f", p_fdr), ", R² = ", 
+                          format_p(res$p_val), ", FDR p = ",
+                          format_p(p_fdr), ", R² = ", 
                           sprintf("%.3f", res$r2), ", 95% CI ", ci_text)
   
   kruskal_format <- paste0("H(", res$kruskal_df, ") = ", 
                            sprintf("%.2f", res$kruskal_stat), ", p = ", 
-                           sprintf("%.3f", res$disp_p), ", FDR p = ",
-                           sprintf("%.3f", disp_p_fdr))
+                           format_p(res$disp_p), ", FDR p = ",
+                           format_p(disp_p_fdr))
   
   # Store PERMANOVA results with FDR
   results_df_list[[ill_group]] <- data.frame(
@@ -414,14 +426,14 @@ for (ill_group in names(results_summary)) {
     PERMANOVA_SumOfSqs = round(res$adonis_res$SumOfSqs[1], 4),
     PERMANOVA_R2 = round(res$r2, 4),
     PERMANOVA_F = round(res$f_stat, 4),
-    PERMANOVA_P = round(res$p_val, 4),
-    PERMANOVA_P_FDR = round(p_fdr, 4),
+    PERMANOVA_P = format_p(res$p_val),
+    PERMANOVA_P_FDR = format_p(p_fdr),
     R2_95CI_lower = round(res$ci_r2[1], 4),
     R2_95CI_upper = round(res$ci_r2[2], 4),
     `Kruskal-Wallis_H` = round(res$kruskal_stat, 4),
     `Kruskal-Wallis_Df` = res$kruskal_df,
-    `Kruskal-Wallis_P` = round(res$disp_p, 4),
-    `Kruskal-Wallis_P_FDR` = round(disp_p_fdr, 4),
+    `Kruskal-Wallis_P` = format_p(res$disp_p),
+    `Kruskal-Wallis_P_FDR` = format_p(disp_p_fdr),
     Nature_Format_PERMANOVA = nature_format,
     Nature_Format_KruskalWallis = kruskal_format
   )
@@ -457,8 +469,8 @@ for (ill_group in names(all_age_pvals)) {
         "95% CI [not available]"
       }
       text_val <- paste0("F(", df_n, ", ", df_d, ") = ", sprintf("%.2f", f_val), 
-                         ", p = ", sprintf("%.3f", p_val_age),
-                         ", FDR p = ", sprintf("%.3f", p_fdr_age),
+                         ", p = ", format_p(p_val_age),
+                         ", FDR p = ", format_p(p_fdr_age),
                          ", R² = ", sprintf("%.3f", r2_val), 
                          ", ", ci_text_age)
     }
@@ -479,7 +491,7 @@ write.csv(age_stratified_df, csv_out_age, row.names = FALSE)
 # PERMANOVA text as plot title with FDR
 # ======================================================
 top_p_text <- if(nrow(results_df) > 0 && !is.na(results_df$PERMANOVA_P_FDR[1])) {
-  paste0("All Age Adjusted PERMANOVA FDR p = ", signif(results_df$PERMANOVA_P_FDR[1],3))
+  paste0("All Age Adjusted PERMANOVA FDR p = ", format_p(as.numeric(as.character(results_df$PERMANOVA_P_FDR[1]))))
 } else {
   "All Age Adjusted PERMANOVA FDR p = NA"
 }
@@ -519,6 +531,7 @@ cat("\nFDR correction (Benjamini-Hochberg) applied to:\n")
 cat("- Overall PERMANOVA p-values (", length(all_overall_pvals), " comparisons)\n")
 cat("- Age-stratified PERMANOVA p-values (", length(all_age_p_vector), " comparisons)\n")
 cat("- Kruskal-Wallis dispersion p-values (", length(all_disp_pvals), " comparisons)\n")
+cat("\nP-values formatted as: 3 decimal places for p ≥ 0.001, scientific notation for p < 0.001\n")
 cat("\nNature format columns include both raw and FDR-adjusted p-values with:\n")
 cat("- F statistic with degrees of freedom\n")
 cat("- p-values\n")

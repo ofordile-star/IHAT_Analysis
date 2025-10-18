@@ -67,21 +67,42 @@ alpha_data$Group <- paste0(alpha_data$timepoints, "_", alpha_data$Ill_Status)
 # Metrics and comparisons
 # ======================================================
 metrics <- c("Richness", "Shannon", "Simpson", "Pielou", "Fisher")
+
+# Note: First element is reference, coefficient = second - first
+# Display labels will be auto-generated with appropriate ordering
 comparisons <- list(
-  c("D1_Ill", "D1_Not-Ill"),
-  c("D15_Ill", "D15_Not-Ill"),
-  c("D85_Ill", "D85_Not-Ill"),
-  c("D1_Ill", "D85_Not-Ill"),
-  c("D15_Ill", "D85_Not-Ill"),
-  c("D1_Not-Ill", "D15_Not-Ill"),
-  c("D15_Not-Ill", "D85_Not-Ill"),
-  c("D1_Ill", "D15_Ill"),
-  c("D15_Ill", "D85_Ill"),
-  c("D1_Ill", "D85_Ill"),
-  c("D1_Not-Ill", "D85_Not-Ill"),
-  c("D1_Not-Ill", "D85_Ill"),
-  c("D15_Not-Ill", "D85_Ill")
+  c("D1_Not-Ill", "D1_Ill"),      
+  c("D15_Not-Ill", "D15_Ill"),    
+  c("D85_Not-Ill", "D85_Ill"),    
+  c("D85_Not-Ill", "D1_Ill"),     
+  c("D85_Not-Ill", "D15_Ill"),    
+  c("D1_Not-Ill", "D15_Not-Ill"), 
+  c("D15_Not-Ill", "D85_Not-Ill"), 
+  c("D1_Ill", "D15_Ill"),         
+  c("D15_Ill", "D85_Ill"),        
+  c("D1_Ill", "D85_Ill"),         
+  c("D1_Not-Ill", "D85_Not-Ill"), 
+  c("D1_Not-Ill", "D85_Ill"),     
+  c("D15_Not-Ill", "D85_Ill")     
 )
+
+# Function to generate display labels with proper ordering
+generate_display_label <- function(comp) {
+  # Extract timepoints and statuses
+  tp1 <- strsplit(comp[1], "_")[[1]][1]
+  tp2 <- strsplit(comp[2], "_")[[1]][1]
+  status1 <- strsplit(comp[1], "_")[[1]][2]
+  status2 <- strsplit(comp[2], "_")[[1]][2]
+  
+  # If it's Ill vs Not-Ill comparison, show Ill first
+  if(status1 == "Not-Ill" && status2 == "Ill") {
+    return(paste(comp[2], "vs", comp[1]))
+  }
+  # Otherwise keep the order as is (chronological for time comparisons)
+  else {
+    return(paste(comp[1], "vs", comp[2]))
+  }
+}
 
 # ======================================================
 # Compute detailed stats function
@@ -95,23 +116,24 @@ run_comparison_detailed <- function(data, metric, group_var) {
   n <- nrow(data)
   
   if(same_timepoint) {
-    # Linear model for same timepoint
-    fit <- lm(as.formula(paste(metric, "~ Ill_Status + AgeGroup")), data = data)
+    # Linear model for same timepoint - use group_var for consistency
+    fit <- lm(as.formula(paste(metric, "~", group_var, "+ AgeGroup")), data = data)
     aov_tab <- anova(fit)
     
-    p_val <- aov_tab["Ill_Status", "Pr(>F)"]
-    f_stat <- aov_tab["Ill_Status", "F value"]
-    df1 <- aov_tab["Ill_Status", "Df"]
+    p_val <- aov_tab[group_var, "Pr(>F)"]
+    f_stat <- aov_tab[group_var, "F value"]
+    df1 <- aov_tab[group_var, "Df"]
     df2 <- aov_tab["Residuals", "Df"]
     
     coef_summary <- summary(fit)$coefficients
-    if("Ill_StatusIll" %in% rownames(coef_summary)) {
-      estimate <- coef_summary["Ill_StatusIll", "Estimate"]
-      ci <- confint(fit)["Ill_StatusIll", ]
+    comp_name <- paste0(group_var, levels(data[[group_var]])[2])
+    if(comp_name %in% rownames(coef_summary)) {
+      estimate <- coef_summary[comp_name, "Estimate"]
+      ci <- confint(fit)[comp_name, ]
       ci_lower <- ci[1]; ci_upper <- ci[2]
     } else { estimate <- ci_lower <- ci_upper <- NA_real_ }
     
-    ss_effect <- aov_tab["Ill_Status", "Sum Sq"]
+    ss_effect <- aov_tab[group_var, "Sum Sq"]
     partial_eta2 <- ss_effect / (ss_effect + aov_tab["Residuals", "Sum Sq"])
     
   } else {
@@ -175,7 +197,8 @@ run_comparison_detailed <- function(data, metric, group_var) {
 detailed_results <- list()
 for(i in seq_along(comparisons)){
   comp <- comparisons[[i]]
-  comp_name <- paste(comp, collapse=" vs ")
+  comp_display <- generate_display_label(comp)  # Auto-generate label
+  
   comp_data <- alpha_data %>% filter(Group %in% comp)
   comp_data$ComparisonGroup <- factor(comp_data$Group, levels=comp)
   
@@ -183,9 +206,9 @@ for(i in seq_along(comparisons)){
     for(m in metrics){
       stats <- run_comparison_detailed(comp_data, m, "ComparisonGroup")
       if(!is.null(stats)){
-        result_row <- data.frame(Comparison=comp_name, Metric=m, stringsAsFactors=FALSE)
+        result_row <- data.frame(Comparison=comp_display, Metric=m, stringsAsFactors=FALSE)
         result_row <- cbind(result_row, stats)
-        detailed_results[[paste(comp_name,m,sep="_")]] <- result_row
+        detailed_results[[paste(comp_display,m,sep="_")]] <- result_row
       }
     }
   }
@@ -252,13 +275,14 @@ create_comparison_plots_nature <- function(alpha_data, all_detailed_results, met
   
   for(i in seq_along(comparisons)){
     comp <- comparisons[[i]]
-    comp_name <- paste(comp, collapse=" vs ")
+    comp_display <- generate_display_label(comp)  # Auto-generate label
+    
     comp_data <- alpha_data %>% filter(Group %in% comp)
     comp_data$ComparisonGroup <- factor(comp_data$Group, levels=comp)
     
     if(nrow(comp_data)>0){
       for(m in metrics){
-        p_val <- all_detailed_results %>% filter(Comparison==comp_name, Metric==m) %>% pull(p_adj)
+        p_val <- all_detailed_results %>% filter(Comparison==comp_display, Metric==m) %>% pull(p_adj)
         p_label <- ifelse(length(p_val)==0 || is.na(p_val), "", sprintf("FDR p = %.3f", p_val))
         
         fill_colors <- group_colors[sapply(comp, function(x) strsplit(x,"_")[[1]][2])]
@@ -269,7 +293,7 @@ create_comparison_plots_nature <- function(alpha_data, all_detailed_results, met
           geom_jitter(size=1, alpha=0.7, width=0.15) +
           scale_fill_manual(values=fill_colors, guide="none") +
           scale_y_continuous(limits=y_ranges[[m]]) +
-          labs(title=paste0(m," – ",comp_name), x=NULL, y=m) +
+          labs(title=paste0(m," – ",comp_display), x=NULL, y=m) +  # Use display label in title
           theme_minimal(base_size=10, base_family="Helvetica") +
           theme(panel.grid=element_blank(),
                 plot.title=element_text(size=11, face="bold"),
@@ -282,7 +306,7 @@ create_comparison_plots_nature <- function(alpha_data, all_detailed_results, met
                 axis.ticks.length=unit(-3,"pt")) +
           annotate("text", x=1.5, y=y_ranges[[m]][2]*0.95, label=p_label, size=4, fontface="bold")
         
-        plot_list[[paste(comp_name,m,sep="_")]] <- p
+        plot_list[[paste(comp_display,m,sep="_")]] <- p  # Use display label for plot naming
       }
     }
   }
@@ -332,3 +356,4 @@ create_canvases()
 print("All analyses and plots complete!")
 print("Detailed statistics: Alpha_Diversity_Detailed_Statistics_Nature.csv")
 print("Condensed FDR summary: Alpha_Diversity_FDR_Summary.csv")
+print("Note: Coefficients represent Ill - Not-Ill (negative = lower in Ill group)")
