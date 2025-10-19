@@ -52,7 +52,13 @@ df1 <- anova_summary[["Df"]][1]
 df2 <- anova_summary[["Df"]][2]
 eta2 <- anova_summary[["Sum Sq"]][1] / sum(anova_summary[["Sum Sq"]])
 
-anova_p_label <- if(anova_p < 2e-16) "p < 2e-16" else paste0("p = ", signif(anova_p,3))
+anova_p_label <- if(anova_p >= 0.001) {
+  paste0("p = ", round(anova_p, 3))
+} else if(anova_p > 0 && is.finite(anova_p)) {
+  paste0("p = ", sprintf("%.2e", anova_p))
+} else {
+  "p < 1e-20"
+}
 
 # ---- Logistic Regression Interaction P ----
 df_a <- df_a %>% mutate(Ill_num = ifelse(Ill_Status == "Ill", 1, 0))
@@ -61,7 +67,14 @@ glm_summary <- broom::tidy(glm_fit, conf.int = TRUE, exponentiate = TRUE)
 
 interaction_terms <- glm_summary %>% filter(grepl("logP:age_group", term))
 interaction_p_label <- if(nrow(interaction_terms) > 0) {
-  paste0("Interaction P = ", signif(max(interaction_terms$p.value, na.rm = TRUE), 3))
+  p_val <- max(interaction_terms$p.value, na.rm = TRUE)
+  if(p_val >= 0.001) {
+    paste0("Interaction P = ", round(p_val, 3))
+  } else if(p_val > 0 && is.finite(p_val)) {
+    paste0("Interaction P = ", sprintf("%.2e", p_val))
+  } else {
+    "Interaction P < 1e-20"
+  }
 } else {"Interaction P = NA"}
 
 combined_label_a <- paste0(
@@ -77,9 +90,14 @@ tukey_df <- as.data.frame(tukey_res$age_group)
 tukey_df$comparison <- rownames(tukey_df)
 tukey_df <- tukey_df %>%
   mutate(
+    p_formatted = ifelse(`p adj` >= 0.001, 
+                         as.character(round(`p adj`, 3)),
+                         ifelse(`p adj` > 0 & is.finite(`p adj`),
+                                sprintf("%.2e", `p adj`),
+                                "< 1e-20")),
     Nature_Report = paste0(
       "Diff(", comparison, ") = ", round(diff,2),
-      ", p = ", signif(`p adj`,3),
+      ", p = ", p_formatted,
       ", 95% CI [", round(lwr,2), ", ", round(upr,2), "]"
     )
   )
@@ -87,10 +105,17 @@ write_csv(tukey_df, "C:/Users/oofordile/Desktop/Pairwise_AgeGroup_Tukey.csv")
 
 # ---- Logistic Regression CSV ----
 glm_summary <- glm_summary %>%
-  mutate(Nature_Report = paste0(
-    term, ": OR = ", round(estimate,3),
-    ", 95% CI [", round(conf.low,3), ", ", round(conf.high,3), "], p = ", signif(p.value,3)
-  ))
+  mutate(
+    p_formatted = ifelse(p.value >= 0.001, 
+                         as.character(round(p.value, 3)),
+                         ifelse(p.value > 0 & is.finite(p.value),
+                                sprintf("%.2e", p.value),
+                                "< 1e-20")),
+    Nature_Report = paste0(
+      term, ": OR = ", round(estimate,3),
+      ", 95% CI [", round(conf.low,3), ", ", round(conf.high,3), "], p = ", p_formatted
+    )
+  )
 write_csv(glm_summary, "C:/Users/oofordile/Desktop/AgeStratified_LogisticRegression_4dp.csv")
 
 # ---- Combined CSV ----
@@ -105,8 +130,15 @@ write_csv(anova_tukey_combined, "C:/Users/oofordile/Desktop/Prevotella_AgeGroup_
 # ======================================================
 pairwise_data <- tukey_df %>%
   tidyr::separate(comparison, into = c("group2","group1"), sep="-") %>%
-  mutate(y.position = max(df_a$logP) * c(1.05,1.15,1.25)[1:n()],
-         label = paste0("p = ", signif(`p adj`,3)))
+  mutate(
+    p_formatted = ifelse(`p adj` >= 0.001, 
+                         as.character(round(`p adj`, 3)),
+                         ifelse(`p adj` > 0 & is.finite(`p adj`),
+                                sprintf("%.2e", `p adj`),
+                                "< 1e-20")),
+    y.position = max(df_a$logP) * c(1.05,1.15,1.25)[1:n()],
+    label = paste0("p = ", p_formatted)
+  )
 
 plot_a_inner <- ggplot(df_a, aes(x = age_group, y = logP, fill = age_group)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA,
@@ -155,7 +187,7 @@ plot_a <- ggdraw() +
   draw_plot(plot_a_inner, y=0, height=0.88)
 
 # ======================================================
-# PANEL B: ILLNESS STATUS DISTRIBUTION BY AGE (UNCHANGED)
+# PANEL B: ILLNESS STATUS DISTRIBUTION BY AGE
 # ======================================================
 df_b <- df %>% filter(!is.na(Ill_Status), !is.na(age_group))
 df_b$Ill_Status <- factor(df_b$Ill_Status, levels=c("Not-Ill","Ill"))
@@ -167,12 +199,26 @@ ill_df <- df_b %>%
 ill_tab <- table(df_b$age_group, df_b$Ill_Status)
 if(all(dim(ill_tab)==c(length(age_levels),2)) & all(rowSums(ill_tab)>0)){
   chisq_res <- chisq.test(ill_tab)
+  p_formatted <- if(chisq_res$p.value >= 0.001) {
+    round(chisq_res$p.value, 3)
+  } else if(chisq_res$p.value < 1e-20) {
+    "< 1e-20"
+  } else {
+    sprintf("%.2e", chisq_res$p.value)
+  }
   test_label <- paste0("Chi-sq(", chisq_res$parameter, ") = ",
                        round(chisq_res$statistic,2),
-                       ", P = ", signif(chisq_res$p.value,3))
+                       ", P = ", p_formatted)
 } else {
   fisher_res <- fisher.test(ill_tab)
-  test_label <- paste0("Fisher's Exact test P = ", signif(fisher_res$p.value,3))
+  p_formatted <- if(fisher_res$p.value >= 0.001) {
+    round(fisher_res$p.value, 3)
+  } else if(fisher_res$p.value < 1e-20) {
+    "< 1e-20"
+  } else {
+    sprintf("%.2e", fisher_res$p.value)
+  }
+  test_label <- paste0("Fisher's Exact test P = ", p_formatted)
 }
 
 plot_b_inner <- ggplot(ill_df, aes(x=age_group, y=N_children, fill=age_group)) +
