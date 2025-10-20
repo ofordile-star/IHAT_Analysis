@@ -8,7 +8,8 @@ file_path <- "C:/Users/oofordile/Desktop/Merged_Illness_Cohorts.csv"
 data <- read.csv(file_path, stringsAsFactors = FALSE)
 
 # --- Remove rows with blank or NA Ill_Status ---
-data <- data %>% filter(!is.na(Ill_Status) & Ill_Status != "")
+data <- data %>%
+  filter(!is.na(Ill_Status) & Ill_Status != "")
 
 # --- Prepare metadata for MaAsLin2 ---
 meta_for_maaslin <- data %>%
@@ -59,3 +60,58 @@ fit <- Maaslin2(
   plot_heatmap = FALSE,
   plot_scatter = FALSE
 )
+
+# --- Export significant Iron treatment results (q < 0.1) with confidence intervals ---
+# Read the all_results.tsv file from MaAsLin2 output
+results <- read.table(
+  "C:/Users/oofordile/Desktop/maaslin2_iron_illness_top50_output/all_results.tsv",
+  header = TRUE,
+  sep = "\t",
+  stringsAsFactors = FALSE
+)
+
+# Check available column names
+cat("\nAvailable columns in results:\n")
+print(colnames(results))
+
+# Calculate 95% confidence intervals
+# CI = coefficient ± (1.96 × standard error)
+results <- results %>%
+  mutate(
+    CI_lower = coef - (1.96 * stderr),
+    CI_upper = coef + (1.96 * stderr)
+  )
+
+# Filter for Iron effects with q-value < 0.1
+iron_significant <- results %>%
+  filter(metadata == "Iron" & qval < 0.1) %>%
+  arrange(qval)
+
+# Reorder columns intelligently based on what exists
+# Place CI columns after coefficient
+base_cols <- c("feature", "metadata", "value", "coef", "CI_lower", "CI_upper", "stderr")
+other_cols <- setdiff(colnames(iron_significant), c(base_cols, "CI_lower", "CI_upper"))
+col_order <- c(base_cols, other_cols)
+col_order <- col_order[col_order %in% colnames(iron_significant)]
+
+iron_significant <- iron_significant %>%
+  select(all_of(col_order))
+
+# Export to CSV
+write.csv(
+  iron_significant,
+  "C:/Users/oofordile/Desktop/Iron_significant_results_q0.1.csv",
+  row.names = FALSE
+)
+
+# Print summary
+cat("\n=== Summary of Significant Iron Treatment Results (q < 0.1) ===\n")
+cat("Number of significant associations:", nrow(iron_significant), "\n")
+if (nrow(iron_significant) > 0) {
+  cat("\nTop significant taxa:\n")
+  print(iron_significant[1:min(10, nrow(iron_significant)), 
+                         c("feature", "coef", "CI_lower", "CI_upper", "pval", "qval")])
+} else {
+  cat("No significant associations found with q < 0.1\n")
+}
+cat("\nResults exported to: C:/Users/oofordile/Desktop/Iron_significant_results_q0.1.csv\n")

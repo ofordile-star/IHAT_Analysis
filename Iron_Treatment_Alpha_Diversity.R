@@ -69,6 +69,14 @@ alpha_div_data$Iron_Treatment <- factor(alpha_div_data$Iron_Treatment)
 alpha_div_data$Age_Group <- factor(alpha_div_data$Age_Group)
 alpha_div_data$Randomisation_No <- factor(alpha_div_data$Randomisation_No)
 
+# --- Calculate sample sizes per Ill_Status × Iron_Treatment group ---
+group_counts <- alpha_div_data %>%
+  group_by(Ill_Status, Iron_Treatment) %>%
+  summarise(n = n(), .groups = "drop")
+
+cat("\nSample sizes per Ill_Status × Iron_Treatment group:\n")
+print(group_counts)
+
 # --- Mixed Effects Modeling ---
 metrics <- c("Richness", "Shannon", "Simpson", "Fisher", "Pielou")
 alpha_results <- list()
@@ -93,9 +101,6 @@ write_csv(all_alpha_results, csv_path)
 # --- Extract ONLY the specific interaction term p-value ---
 interaction_results <- all_alpha_results %>% filter(term == "Ill_StatusNot-Ill:Iron_Treatmenttreatment")
 
-# --- Define clean group labels ---
-alpha_div_data$Group <- interaction(alpha_div_data$Ill_Status, alpha_div_data$Iron_Treatment, sep = " : ")
-
 # --- Plot Alpha Diversity with Annotated Interaction p-value ---
 color_map <- c("Ill" = "#EF2929", "Not-Ill" = "#729FCF")
 plot_list <- list()
@@ -104,7 +109,7 @@ for (metric in metrics) {
   interaction_p <- interaction_results %>% filter(Metric == metric) %>% pull(p.value.adjusted)
   subtitle_text <- if (length(interaction_p) == 1) { paste0("Interaction p (adj) = ", signif(interaction_p, 3)) } else { "" }
   
-  p <- ggplot(alpha_div_data, aes(x = Group, y = .data[[metric]], fill = Ill_Status)) +
+  p <- ggplot(alpha_div_data, aes(x = interaction(Ill_Status, Iron_Treatment, sep = " : "), y = .data[[metric]], fill = Ill_Status)) +
     geom_boxplot(outlier.shape = NA, alpha = 0.7) +
     geom_jitter(width = 0.15, alpha = 0.3, size = 0.8) +
     scale_fill_manual(values = color_map) +
@@ -120,9 +125,9 @@ for (metric in metrics) {
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
       axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.line = element_line(color = "black", size = 0.3),     # axis lines
-      axis.ticks = element_line(color = "black", size = 0.3),    # ticks
-      axis.ticks.length = unit(-0.1, "cm")                       # inward ticks
+      axis.line = element_line(color = "black", size = 0.3),
+      axis.ticks = element_line(color = "black", size = 0.3),
+      axis.ticks.length = unit(-0.1, "cm")
     )
   plot_list[[metric]] <- p
 }
