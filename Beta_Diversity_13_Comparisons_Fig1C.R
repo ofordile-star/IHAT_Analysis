@@ -402,7 +402,7 @@ write.csv(age_stratified_df[, c("Comparison", "7–12 months", "1–2 years", ">
 # ======================================================
 # Canvas 1
 permanova_plot <- ggplot() +
-  labs(title = paste0("All Age Adjusted PERMANOVA FDR p = ", format_p(canvas1_overall_p_fdr))) +
+  labs(title = paste0("All Age-Adjusted PERMANOVA FDR p = ", format_p(canvas1_overall_p_fdr))) +
   theme_void() +
   theme(plot.title = element_text(size = 21, hjust = 0.5), plot.margin = margin(10, 0, 10, 0))
 

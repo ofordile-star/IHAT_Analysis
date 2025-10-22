@@ -332,7 +332,7 @@ early_combined <- early_plots$pcoa_plot + early_plots$centroid_plot +
 
 # === Create PERMANOVA text plot with FDR ===
 permanova_plot <- ggplot() +
-  labs(title = paste0("All Age Adjusted PERMANOVA FDR p = ", signif(recent_results$p_val_fdr, 3))) +
+  labs(title = paste0("All Age-Adjusted PERMANOVA FDR p = ", signif(recent_results$p_val_fdr, 3))) +
   theme_void() +
   theme(
     plot.title = element_text(size = 21, face = "plain", hjust = 0.5),

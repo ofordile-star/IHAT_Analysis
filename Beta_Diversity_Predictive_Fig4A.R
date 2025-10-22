@@ -491,9 +491,9 @@ write.csv(age_stratified_df, csv_out_age, row.names = FALSE)
 # PERMANOVA text as plot title with FDR
 # ======================================================
 top_p_text <- if(nrow(results_df) > 0 && !is.na(results_df$PERMANOVA_P_FDR[1])) {
-  paste0("All Age Adjusted PERMANOVA FDR p = ", format_p(as.numeric(as.character(results_df$PERMANOVA_P_FDR[1]))))
+  paste0("All Age-Adjusted PERMANOVA FDR p = ", format_p(as.numeric(as.character(results_df$PERMANOVA_P_FDR[1]))))
 } else {
-  "All Age Adjusted PERMANOVA FDR p = NA"
+  "All Age-Adjusted PERMANOVA FDR p = NA"
 }
 permanova_plot <- ggplot() +
   labs(title = top_p_text) +
