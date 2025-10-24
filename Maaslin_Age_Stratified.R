@@ -113,13 +113,18 @@ pairwise_comparisons <- list(
 )
 
 # ======================================================
-# Run stratified analyses by age group
+# Run stratified analyses by age group and print Ns
 # ======================================================
 for (comp in pairwise_comparisons) {
   for (age in c("7to12 mths", "1to2years", "plus2years")) {
     message("Running Maaslin2 for: ", paste(comp$groups, collapse = " vs "), " | Age group: ", age)
     
     subset_data <- meta_joined %>% filter(age_group == age)
+    
+    # Print Ns for this comparison and age group
+    n_table <- table(subset_data$SampleGroup)
+    message("Sample sizes (N) for ", age, ":")
+    print(n_table)
     
     if (nrow(subset_data) > 0) {
       run_maaslin2_stratified_NatureText(

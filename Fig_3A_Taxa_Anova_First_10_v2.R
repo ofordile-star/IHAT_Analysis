@@ -23,7 +23,6 @@ emf_path <- "C:/Users/oofordile/Desktop/Ill_vs_NotIll_Taxa_Boxplots.emf"
 data <- read_csv(file_path) %>%
   filter(!is.na(Ill_Status) & Ill_Status != "")
 
-# Prepare analysis data
 analysis_data <- data %>%
   dplyr::select(`Randomisation No`, timepoints, Ill_Status, `3agegroups based on age at sampling`, 13:22) %>%
   dplyr::rename(age_group = `3agegroups based on age at sampling`) %>%
@@ -152,7 +151,6 @@ combined_results <- anova_combined %>%
 # ======================================================
 reg_combined <- bind_rows(reg_list)
 
-# Extract Ill_Status and Timepoints adjusted stats
 ill_status_adj <- anova_results_filtered %>%
   filter(term == "Ill_Status") %>%
   select(taxon, p_adj, F_value, df) %>%
@@ -163,12 +161,10 @@ time_adj <- anova_results_filtered %>%
   select(taxon, p_adj, F_value, df) %>%
   rename(Taxon = taxon, Time_p_adj = p_adj, Time_F = F_value, Time_df = df)
 
-# Merge
 reg_combined <- reg_combined %>%
   left_join(ill_status_adj, by = "Taxon") %>%
   left_join(time_adj, by = "Taxon")
 
-# Nature report for Ill_Status (existing)
 reg_combined <- reg_combined %>%
   mutate(
     Nature_Report = paste0(
@@ -178,12 +174,7 @@ reg_combined <- reg_combined %>%
       ", 95% CI [", round(Eta2_CI_low, 3), ", ", round(Eta2_CI_high, 3), "]",
       "; slope = ", round(Slope, 3),
       " (95% CI [", round(Slope_CI_low, 3), ", ", round(Slope_CI_high, 3), "])"
-    )
-  )
-
-# Nature report for significant p_time (< 0.05)
-reg_combined <- reg_combined %>%
-  mutate(
+    ),
     Nature_Report_Time = ifelse(
       Time_p_adj < 0.05,
       paste0(
@@ -212,7 +203,7 @@ write_csv(final_csv, csv_path)
 cat("CSV saved to Desktop:", csv_path, "\n")
 
 # ======================================================
-# Plot Section (unchanged)
+# Plot Section (Nature-ready: no title)
 # ======================================================
 plot_taxa <- c("Prevotella_stercorea_7.05", "Escherichia_coli_3.51")
 
@@ -283,12 +274,13 @@ ecoli_plot <- long_data %>% filter(Taxa == "Escherichia_coli_3.51") %>% make_tax
 taxa_plot <- prev_plot + ecoli_plot + plot_layout(ncol = 2, guides = "collect") & 
   theme(legend.position = "bottom", legend.justification = "center", legend.margin = margin(t = 10, b = 10))
 
-taxa_plot <- taxa_plot + plot_annotation(
-  title = "Taxa with significant Ill vs Not-Ill gap (FDR and Age-Adjusted p < 0.05)",
-  theme = theme(plot.title = element_text(hjust = 0.5, size = 16))
-)
+# No main title for Nature
+# taxa_plot <- taxa_plot + plot_annotation(title = "Removed for Nature submission")
 
+# Save PDF
 ggsave(pdf_path, taxa_plot, width = 10, height = 6, dpi = 300)
+
+# Save EMF
 devEMF::emf(emf_path, width = 10, height = 6)
 print(taxa_plot)
 dev.off()

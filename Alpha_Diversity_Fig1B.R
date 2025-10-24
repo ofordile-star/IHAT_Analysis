@@ -1,7 +1,7 @@
 # ======================================================
 # Fig 1B — D1/D15 Ill vs D85 Not-Ill: Richness & Fisher
-# CORRECTED: Now uses ANOVA p-values (consistent with Document 2)
 # Enhanced with Nature-Style Statistics (eta2_p, UTF-8)
+# Main plot titles removed
 # ======================================================
 
 # -------------------------
@@ -86,7 +86,6 @@ prepare_comparison <- function(data, age_grp = NULL) {
 
 # ======================================================
 # Compute detailed statistics (age-adjusted or stratified)
-# CORRECTED: Now uses ANOVA p-value instead of coefficient p-value
 # ======================================================
 compute_detailed_stats <- function(df, metric, analysis_type = "Overall") {
   comparisons <- unique(df$Comparison)
@@ -104,14 +103,12 @@ compute_detailed_stats <- function(df, metric, analysis_type = "Overall") {
         fit <- lm(as.formula(paste(metric, "~ Ill_Status")), data = tmp)
       }
       
-      # Extract coefficient estimate and CI
       coef_summary <- summary(fit)$coefficients
       coef_est <- coef_summary["Ill_StatusIll", "Estimate"]
       ci <- confint(fit, "Ill_StatusIll")
       
-      # CORRECTED: Use ANOVA p-value (not coefficient p-value)
       aov_tab <- anova(fit)
-      p_val <- aov_tab["Ill_Status", "Pr(>F)"]  # <-- THIS IS THE FIX
+      p_val <- aov_tab["Ill_Status", "Pr(>F)"]
       f_stat <- aov_tab["Ill_Status", "F value"]
       df1 <- aov_tab["Ill_Status", "Df"]
       df2 <- aov_tab["Residuals", "Df"]
@@ -205,8 +202,7 @@ write.csv(all_combined_stats,
           row.names = FALSE, fileEncoding = "UTF-8")
 
 # -------------------------
-# Compute full stats for plotting (age-adjusted if requested)
-# CORRECTED: Now uses ANOVA p-value
+# Compute full stats for plotting
 # -------------------------
 compute_full_stats <- function(df, metric, age_adjusted = FALSE) {
   comparisons <- unique(df$Comparison)
@@ -225,10 +221,8 @@ compute_full_stats <- function(df, metric, age_adjusted = FALSE) {
       
       coef_est <- coef(fit)["Ill_StatusIll"]
       ci <- confint(fit, "Ill_StatusIll")
-      
-      # CORRECTED: Use ANOVA p-value
       aov_tab <- anova(fit)
-      p_val <- aov_tab["Ill_Status", "Pr(>F)"]  # <-- THIS IS THE FIX
+      p_val <- aov_tab["Ill_Status", "Pr(>F)"]
       
       means <- tmp %>% group_by(Ill_Status) %>% summarise(
         n = n(),
@@ -259,7 +253,7 @@ compute_full_stats <- function(df, metric, age_adjusted = FALSE) {
 # Plot function (age-adjusted for top panel)
 # -------------------------
 create_comparison_plot <- function(comp_data, metric, y_label, age_grp = NULL, show_legend = FALSE, y_axis_text = TRUE) {
-  age_adjusted_flag <- is.null(age_grp)  # TRUE for Age-Adjusted panel
+  age_adjusted_flag <- is.null(age_grp)
   pvals <- compute_full_stats(comp_data, metric, age_adjusted = age_adjusted_flag)
   
   p <- ggplot(comp_data, aes(x = Comparison, y = .data[[metric]], fill = Ill_Status, color = Ill_Status)) +
@@ -267,11 +261,10 @@ create_comparison_plot <- function(comp_data, metric, y_label, age_grp = NULL, s
     geom_point(position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6), alpha = 0.5, size = 1.8) +
     scale_fill_manual(values = group_colors) +
     scale_color_manual(values = group_colors) +
-    labs(y = if(y_axis_text) y_label else NULL, x = NULL, title = ifelse(is.null(age_grp), "Age-Adjusted", age_grp)) +
+    labs(y = if(y_axis_text) y_label else NULL, x = NULL, title = NULL) +  # title removed
     theme_minimal(base_size = 14) +
     theme(
       panel.grid = element_blank(),
-      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
       axis.text.x = element_text(angle = 25, hjust = 1, size = 12),
       axis.title.y = element_text(size = 14, face = "bold"),
       legend.position = if(show_legend) "bottom" else "none",
@@ -288,11 +281,7 @@ create_comparison_plot <- function(comp_data, metric, y_label, age_grp = NULL, s
     y_max <- max(comp_data[[metric]][comp_data$Comparison == cmp], na.rm = TRUE)
     
     p_val <- pvals$p_adj[i]
-    if(p_val < 0.001) {
-      p_label <- sprintf("FDR p = %.2e", p_val)
-    } else {
-      p_label <- sprintf("FDR p = %.3f", p_val)
-    }
+    p_label <- if(p_val < 0.001) sprintf("FDR p = %.2e", p_val) else sprintf("FDR p = %.3f", p_val)
     
     p <- p + annotate("text", x = cmp, y = y_max + 0.08*(y_max), 
                       label = p_label, size = 5, fontface = "bold")
@@ -319,24 +308,22 @@ for(metric in c("Richness", "Fisher")) {
                                            y_axis_text = FALSE)
   }
   
-  main_title <- paste0("D1/D15 Ill vs D85 Not-Ill: ", y_label)
-  
+  # Save as PDF
   pdf(paste0("C:/Users/oofordile/Desktop/", file_prefix, "_D1D15_vs_D85_SingleRow_CORRECTED.pdf"), width = 20, height = 5)
-  grid.arrange(grobs = plots, ncol = 4, top = textGrob(main_title, gp = gpar(fontsize = 16, fontface = "bold")))
+  grid.arrange(grobs = plots, ncol = 4, top = NULL)
   dev.off()
   
+  # Save as EMF
   emf(paste0("C:/Users/oofordile/Desktop/", file_prefix, "_D1D15_vs_D85_SingleRow_CORRECTED.emf"), width = 20, height = 5, emfPlus = TRUE)
-  grid.arrange(grobs = plots, ncol = 4, top = textGrob(main_title, gp = gpar(fontsize = 16, fontface = "bold")))
+  grid.arrange(grobs = plots, ncol = 4, top = NULL)
   dev.off()
 }
 
 cat("\n======================================================\n")
-cat("CORRECTED: Single-row D1/D15 Ill vs D85 Not-Ill plots complete!\n")
+cat("Single-row D1/D15 Ill vs D85 Not-Ill plots complete!\n")
 cat("Generated 2 sets of plots:\n")
 cat(" → Richness_D1D15_vs_D85_SingleRow_CORRECTED (PDF & EMF)\n")
 cat(" → Fisher_D1D15_vs_D85_SingleRow_CORRECTED (PDF & EMF)\n")
 cat("\nCombined detailed statistics CSV exported:\n")
 cat(" → D1D15_vs_D85_DetailedStats_CORRECTED.csv\n")
-cat("   (includes both Richness and Fisher metrics)\n")
-cat("\n*** NOW USING ANOVA P-VALUES (consistent with Document 2) ***\n")
 cat("======================================================\n")

@@ -138,18 +138,16 @@ make_pcoa_plot <- function(data, group_title, pval_text) {
 plot_placebo <- make_pcoa_plot(pcoa_placebo, "Placebo", p_int_label)
 plot_treatment <- make_pcoa_plot(pcoa_treatment, "Treatment", p_int_label)
 
-# --- Export side-by-side PDF ---
+# --- Export side-by-side PDF without main title ---
 pdf_path <- "C:/Users/oofordile/Desktop/PCoA_BrayCurtis_by_Treatment_and_IllStatus_thinAxis.pdf"
 pdf(pdf_path, width = 12, height = 6)
-grid.arrange(plot_placebo, plot_treatment, nrow = 1,
-             top = "PCoA of Bray–Curtis Distance by Iron Treatment and Illness Status")
+grid.arrange(plot_placebo, plot_treatment, nrow = 1)  # Removed `top` argument
 dev.off()
 
-# --- Export EMF ---
+# --- Export EMF without main title ---
 emf_path <- "C:/Users/oofordile/Desktop/PCoA_BrayCurtis_by_Treatment_and_IllStatus_thinAxis.emf"
 emf(file = emf_path, width = 12, height = 6, family = "Arial")
-grid.arrange(plot_placebo, plot_treatment, nrow = 1,
-             top = "PCoA of Bray–Curtis Distance by Iron Treatment and Illness Status")
+grid.arrange(plot_placebo, plot_treatment, nrow = 1)  # Removed `top` argument
 dev.off()
 
 # --- Confirmation ---

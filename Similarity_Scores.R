@@ -157,8 +157,7 @@ p <- ggplot(similarity_df, aes(x = AgeGroup, y = Similarity, fill = IllStatus)) 
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +
   geom_jitter(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.5) +
   geom_text(data = label_df, aes(x = AgeGroup, y = 1.02, label = label), inherit.aes = FALSE, size = 4) +
-  labs(title = "Within-individual Bray–Curtis Similarity (D1 vs D85)",
-       y = "Similarity (1 - Bray–Curtis distance)",
+  labs(y = "Similarity (1 - Bray–Curtis distance)",
        x = "Age Group") +
   scale_fill_manual(values = c("Ill" = "#D73027", "Not-Ill" = "#4575B4")) +
   theme_minimal(base_size = 14) +
@@ -176,12 +175,10 @@ p <- ggplot(similarity_df, aes(x = AgeGroup, y = Similarity, fill = IllStatus)) 
 # ======================================================
 # Export: PDF and EMF
 # ======================================================
-# PDF
 pdf("C:/Users/oofordile/Desktop/WithinIndividual_Similarity_Boxplot.pdf", width = 7, height = 5)
 print(p)
 dev.off()
 
-# EMF
 emf("C:/Users/oofordile/Desktop/WithinIndividual_Similarity_Boxplot.emf", width = 7, height = 5)
 print(p)
 dev.off()

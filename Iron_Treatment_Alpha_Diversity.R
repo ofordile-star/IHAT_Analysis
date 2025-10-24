@@ -132,19 +132,17 @@ for (metric in metrics) {
   plot_list[[metric]] <- p
 }
 
-# --- Save Outputs ---
+# --- Save Outputs without main title ---
 # PDF
 pdf_path <- "C:/Users/oofordile/Desktop/Alpha_Diversity_Interaction_Boxplots_withAxis.pdf"
 CairoPDF(pdf_path, width = 14, height = 8)
-grid.arrange(grobs = plot_list, nrow = 2, ncol = 3,
-             top = "Alpha Diversity Metrics by Ill Status × Iron Treatment Interaction")
+grid.arrange(grobs = plot_list, nrow = 2, ncol = 3)  # Removed `top` argument
 dev.off()
 
 # EMF (vector, PowerPoint/Word compatible)
 emf_path <- "C:/Users/oofordile/Desktop/Alpha_Diversity_Interaction_Boxplots_withAxis.emf"
 devEMF::emf(file = emf_path, width = 14, height = 8, family = "Arial")
-grid.arrange(grobs = plot_list, nrow = 2, ncol = 3,
-             top = "Alpha Diversity Metrics by Ill Status × Iron Treatment Interaction")
+grid.arrange(grobs = plot_list, nrow = 2, ncol = 3)  # Removed `top` argument
 dev.off()
 
 cat("\nAnalysis complete.\nCSV saved to:", csv_path,

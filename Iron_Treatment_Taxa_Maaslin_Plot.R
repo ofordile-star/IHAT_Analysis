@@ -27,7 +27,7 @@ sig_iron <- sig_iron %>%
     color = ifelse(coef > 0, "#4CAF50", "#A0522D")
   )
 
-# --- Base bar plot ---
+# --- Base bar plot without main title ---
 p <- ggplot(sig_iron, aes(x = coef, y = feature_clean, fill = color)) +
   geom_col(width = 0.7) +
   scale_fill_identity() +
@@ -36,10 +36,10 @@ p <- ggplot(sig_iron, aes(x = coef, y = feature_clean, fill = color)) +
     aes(label = paste0("q  =  ", signif(qval, 2))),
     hjust = ifelse(sig_iron$coef > 0, 1.05, -0.05),
     color = "black",
-    size = 5.5   # increased font size
+    size = 5.5
   ) +
   labs(x = "Effect size (Coefficient)", y = NULL) +
-  theme_minimal(base_size = 16) +   # bigger overall fonts
+  theme_minimal(base_size = 16) +
   theme(
     axis.title.y = element_blank(),
     panel.grid = element_blank(),
@@ -52,21 +52,14 @@ p <- ggplot(sig_iron, aes(x = coef, y = feature_clean, fill = color)) +
     axis.title = element_text(color = "black", size = 16, face = "bold")
   )
 
-# --- Add title manually with cowplot ---
-title_text <- "Significant Taxa Differentially Abundant by Iron Treatment"
-
-final_plot <- ggdraw() +
-  draw_label(title_text, x = 0.5, y = 0.98, hjust = 0.5, vjust = 1,
-             size = 20, fontface = "bold", color = "black") +
-  draw_plot(p, y = 0, height = 0.95)
-
 # --- Export PDF ---
-pdf("C:/Users/oofordile/Desktop/sig_iron_taxa_plot_inwardsTicks.pdf", width = 8, height = 5)
-print(final_plot)
+pdf("C:/Users/oofordile/Desktop/sig_iron_taxa_plot_inwardsTicks_noTitle.pdf", width = 8, height = 5)
+print(p)
 dev.off()
 
 # --- Export EMF ---
-emf("C:/Users/oofordile/Desktop/sig_iron_taxa_plot_inwardsTicks.emf", width = 8, height = 5,
+emf("C:/Users/oofordile/Desktop/sig_iron_taxa_plot_inwardsTicks_noTitle.emf", width = 8, height = 5,
     emfPlus = FALSE, pointsize = 12)
-print(final_plot)
+print(p)
 dev.off()
+

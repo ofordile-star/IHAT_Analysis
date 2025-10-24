@@ -177,14 +177,10 @@ plot_a_inner <- ggplot(df_a, aes(x = age_group, y = logP, fill = age_group)) +
         plot.margin = margin(t=5,r=10,b=20,l=10))
 
 plot_a <- ggdraw() +
-  draw_label(expression(italic("Prevotella stercorea") *
-                          " Abundance Across Age Groups"),
-             x=0.5, y=0.975, hjust=0.5, vjust=1,
-             size=17, fontface="bold") +
   draw_label(combined_label_a,
-             x=0.5, y=0.915, hjust=0.5, vjust=1,
+             x=0.5, y=0.98, hjust=0.5, vjust=1,
              size=14) +
-  draw_plot(plot_a_inner, y=0, height=0.88)
+  draw_plot(plot_a_inner, y=0, height=0.95)
 
 # ======================================================
 # PANEL B: ILLNESS STATUS DISTRIBUTION BY AGE
@@ -243,10 +239,8 @@ plot_b_inner <- ggplot(ill_df, aes(x=age_group, y=N_children, fill=age_group)) +
         axis.text=element_text(size=13))
 
 plot_b <- ggdraw() +
-  draw_label("Illness Status Distribution by Age Group", x=0.5, y=0.975,
-             hjust=0.5, vjust=1, size=17) +
-  draw_label(test_label, x=0.5, y=0.915, hjust=0.5, vjust=1, size=14) +
-  draw_plot(plot_b_inner, y=0.035, height=0.88)
+  draw_label(test_label, x=0.5, y=0.98, hjust=0.5, vjust=1, size=14) +
+  draw_plot(plot_b_inner, y=0.035, height=0.95)
 
 # ======================================================
 # COMBINE PANELS AND EXPORT

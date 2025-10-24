@@ -1,5 +1,6 @@
 # ======================================================
 # COMBINED 2x4 AE CORRELATION PLOTS + NATURE-STYLE CSV
+# WITH UNIFORM VERTICAL SPACING
 # ======================================================
 
 # ======================================================
@@ -13,6 +14,7 @@ library(broom)
 library(patchwork)
 library(devEMF)
 library(grid)
+library(tidyr)
 
 # ======================================================
 # File paths
@@ -28,6 +30,7 @@ csv_path <- "C:/Users/oofordile/Desktop/AE_Freq_Dur_NatureStatistics.csv"
 # ======================================================
 microbiome_data <- read_csv(microbiome_path)
 ae_data <- read_csv(ae_path)
+
 # ======================================================
 # Compute total infectious diagnoses
 # ======================================================
@@ -50,9 +53,9 @@ d85_data <- microbiome_data %>%
   mutate(log_P = log1p(Prevotella_stercorea_7.05))
 
 # ======================================================
-# Function to prepare AE plots
+# Function to prepare AE plots with uniform spacing
 # ======================================================
-prepare_ae_plot <- function(ae_column, ae_label){
+prepare_ae_plot <- function(ae_column, ae_label, reduce_freq_spacing = FALSE){
   
   ae_filtered <- ae_data %>%
     mutate(StartDate = dmy(`Start date`),
@@ -85,7 +88,7 @@ prepare_ae_plot <- function(ae_column, ae_label){
   final_data <- bind_rows(ill_d85, not_ill)
   
   # -------------------
-  # Frequency plot
+  # Frequency plot with uniform spacing
   # -------------------
   freq_summary <- final_data %>% filter(AE_NO <= 5) %>%
     group_by(AE_NO) %>%
@@ -99,10 +102,20 @@ prepare_ae_plot <- function(ae_column, ae_label){
   freq_ci_group <- tidy(freq_lm_group, conf.int = TRUE)
   r2_group_freq <- glance(freq_lm_group)$r.squared
   
-  freq_group_y_top <- max(freq_summary$mean_log_P) + 4
-  freq_group_y_slope <- freq_group_y_top - 0.6
-  freq_ind_y_top <- max(freq_summary$mean_log_P) + 2.5
-  freq_ind_y_slope <- freq_ind_y_top - 0.6
+  # Uniform spacing: 1 unit within group/individual, 1.5 units between them
+  # Doubly reduced for Infectious and Fever frequency
+  y_max <- max(freq_summary$mean_log_P)
+  if (reduce_freq_spacing) {
+    freq_group_y_top <- y_max + 4.0
+    freq_group_y_slope <- freq_group_y_top - 0.5      # 0.5 paragraph space within
+    freq_ind_y_top <- freq_group_y_slope - 0.75       # 0.75 paragraph spaces between
+    freq_ind_y_slope <- freq_ind_y_top - 0.5          # 0.5 paragraph space within
+  } else {
+    freq_group_y_top <- y_max + 4.0
+    freq_group_y_slope <- freq_group_y_top - 1.0      # 1 paragraph space within
+    freq_ind_y_top <- freq_group_y_slope - 1.5        # 1.5 paragraph spaces between
+    freq_ind_y_slope <- freq_ind_y_top - 1.0          # 1 paragraph space within
+  }
   
   p_freq <- ggplot() +
     geom_point(data=freq_summary, aes(AE_NO, mean_log_P), size=4, color="black") +
@@ -138,7 +151,7 @@ prepare_ae_plot <- function(ae_column, ae_label){
           axis.text=element_text(size=15))
   
   # -------------------
-  # Duration plot
+  # Duration plot with uniform spacing
   # -------------------
   dur_summary <- final_data %>% filter(AE_duration <= 30) %>%
     group_by(AE_duration) %>%
@@ -152,11 +165,13 @@ prepare_ae_plot <- function(ae_column, ae_label){
   dur_ci_group <- tidy(dur_lm_group, conf.int = TRUE)
   r2_group_dur <- glance(dur_lm_group)$r.squared
   
+  # Uniform spacing: 1 unit within group/individual, 1.5 units between them
   x_mid <- max(dur_summary$AE_duration)/2
-  dur_group_y_top <- max(dur_summary$mean_log_P) + 4
-  dur_group_y_slope <- dur_group_y_top - 0.6
-  dur_ind_y_top <- max(dur_summary$mean_log_P) + 2.5
-  dur_ind_y_slope <- dur_ind_y_top - 0.6
+  y_max_dur <- max(dur_summary$mean_log_P)
+  dur_group_y_top <- y_max_dur + 4.0
+  dur_group_y_slope <- dur_group_y_top - 1.0        # 1 paragraph space within
+  dur_ind_y_top <- dur_group_y_slope - 1.5          # 1.5 paragraph spaces between
+  dur_ind_y_slope <- dur_ind_y_top - 1.0            # 1 paragraph space within
   
   p_dur <- ggplot() +
     geom_point(data=dur_summary, aes(AE_duration, mean_log_P), size=4, color="black") +
@@ -196,10 +211,10 @@ prepare_ae_plot <- function(ae_column, ae_label){
 # ======================================================
 # Generate plots for all AE types
 # ======================================================
-plots_infect <- prepare_ae_plot("AE Infection", "Infectious")
+plots_infect <- prepare_ae_plot("AE Infection", "Infectious", reduce_freq_spacing = TRUE)
 plots_diarr <- prepare_ae_plot("AE Diarrhoea", "Diarrhoea")
 plots_ari    <- prepare_ae_plot("AE ARI", "ARI")
-plots_fever  <- prepare_ae_plot("AE Fever", "Fever")
+plots_fever  <- prepare_ae_plot("AE Fever", "Fever", reduce_freq_spacing = TRUE)
 
 # ======================================================
 # Combine 2x4 panels
