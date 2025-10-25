@@ -1,6 +1,6 @@
 # ======================================================
 # Fig 1A — Combined CSV with Nature-Style Statistical Reporting
-# UPDATED: Uses same mixed-effects/GLM methods as first script
+# UPDATED: Added age labels to plots
 # ======================================================
 
 # -------------------------
@@ -238,7 +238,7 @@ all_timepoint_results_by_age <- combined_results %>%
                 CI_lower, CI_upper, F, df1, df2, partial_eta2)
 
 # ======================================================
-# Plotting function
+# Plotting function with age labels
 # ======================================================
 create_condensed_plot <- function(data, metric, y_label, colors, results_df,
                                   title_text, show_legend = FALSE,
@@ -254,6 +254,7 @@ create_condensed_plot <- function(data, metric, y_label, colors, results_df,
   y_diff <- y_range[2] - y_range[1]
   y_max <- y_range[2] + 0.25 * y_diff
   anno_y <- y_max - 0.08 * y_diff
+  
   p <- ggplot(data, aes(x = timepoints, y = .data[[metric]], color = Ill_Status,
                         group = Ill_Status)) +
     geom_point(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.6),
@@ -267,11 +268,12 @@ create_condensed_plot <- function(data, metric, y_label, colors, results_df,
     scale_color_manual(values = colors) +
     scale_fill_manual(values = colors) +
     scale_y_continuous(limits = c(y_range[1] - 0.05 * y_diff, y_max)) +
-    labs(x = "Timepoint", y = if(y_axis_text) y_label else NULL, title = NULL) +   # ← main titles removed
+    labs(x = "Timepoint", y = if(y_axis_text) y_label else NULL, title = title_text) +
     theme_minimal(base_size = 14) +
     theme(panel.grid = element_blank(),
           axis.text = element_text(size = 13),
           axis.title = element_text(size = 14, face = "bold"),
+          plot.title = element_text(size = 15, face = "bold", hjust = 0.5),
           legend.position = if(show_legend) "bottom" else "none",
           legend.title = element_blank(),
           legend.text = element_text(size = 13),
@@ -279,6 +281,7 @@ create_condensed_plot <- function(data, metric, y_label, colors, results_df,
           axis.ticks = element_line(size = 0.4, colour = "black"),
           axis.ticks.length = unit(-2, "mm"),
           plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+  
   if(nrow(stats_df) > 0){
     for(i in 1:nrow(stats_df)) {
       tp_pos <- which(levels(data$timepoints) == stats_df$Timepoint[i])
@@ -287,42 +290,52 @@ create_condensed_plot <- function(data, metric, y_label, colors, results_df,
       anno_offset <- (tp_pos - 2) * 0.06 * y_diff
       anno_y_adjusted <- anno_y + anno_offset
       p <- p + annotate("text", x = tp_pos, y = anno_y_adjusted,
-                        label = p_label, size = 4.5, fontface = "bold")
+                        label = p_label, size = 5, fontface = "bold")
     }
   }
   return(p)
 }
 
 # ======================================================
-# Generate Single-Row 4-Panel Plots (titles removed)
+# Generate Single-Row 4-Panel Plots with age labels
 # ======================================================
 for(metric in all_metrics) {
   y_label <- ifelse(metric == "Richness", "Species Richness", "Fisher's Alpha")
+  
+  # Age-adjusted plot with label
   plot_adjusted <- create_condensed_plot(alpha_data, metric, y_label, group_colors,
-                                         all_timepoint_results_adjusted, "",
+                                         all_timepoint_results_adjusted, 
+                                         "Age-Adjusted",
                                          show_legend = FALSE, age_grp = NULL)
+  
+  # Age-stratified plots with labels
   plots_stratified <- list()
+  age_labels <- c("7-12 months", "1-2 years", ">2 years")
+  
   for(i in seq_along(age_groups)) {
     age_grp <- age_groups[i]
     age_data <- alpha_data %>% filter(AgeGroup == age_grp)
     show_legend <- (i == length(age_groups))
     plots_stratified[[i]] <- create_condensed_plot(age_data, metric, y_label, group_colors,
-                                                   all_timepoint_results_by_age, "",
+                                                   all_timepoint_results_by_age, 
+                                                   age_labels[i],
                                                    show_legend = show_legend,
                                                    age_grp = age_grp, y_axis_text = FALSE)
   }
+  
   pdf(paste0("C:/Users/oofordile/Desktop/", metric, "_SingleRow.pdf"), width = 20, height = 5)
   grid.arrange(plot_adjusted, plots_stratified[[1]], plots_stratified[[2]],
-               plots_stratified[[3]], ncol = 4)   # ← no main title
+               plots_stratified[[3]], ncol = 4)
   dev.off()
+  
   emf(paste0("C:/Users/oofordile/Desktop/", metric, "_SingleRow.emf"), width = 20,
       height = 5, emfPlus = TRUE)
   grid.arrange(plot_adjusted, plots_stratified[[1]], plots_stratified[[2]],
-               plots_stratified[[3]], ncol = 4)   # ← no main title
+               plots_stratified[[3]], ncol = 4)
   dev.off()
 }
 
 cat("\n======================================================\n")
 cat("Analysis complete\n")
-cat("Plots saved without main titles.\n")
+cat("Plots saved with age group labels.\n")
 cat("======================================================\n")

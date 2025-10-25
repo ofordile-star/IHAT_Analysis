@@ -1,7 +1,7 @@
 # ======================================================
 # Fig 1B — D1/D15 Ill vs D85 Not-Ill: Richness & Fisher
 # Enhanced with Nature-Style Statistics (eta2_p, UTF-8)
-# Main plot titles removed
+# UPDATED: Added age labels to plots
 # ======================================================
 
 # -------------------------
@@ -250,9 +250,10 @@ compute_full_stats <- function(df, metric, age_adjusted = FALSE) {
 }
 
 # -------------------------
-# Plot function (age-adjusted for top panel)
+# Plot function with age labels
 # -------------------------
-create_comparison_plot <- function(comp_data, metric, y_label, age_grp = NULL, show_legend = FALSE, y_axis_text = TRUE) {
+create_comparison_plot <- function(comp_data, metric, y_label, title_text = NULL, 
+                                   age_grp = NULL, show_legend = FALSE, y_axis_text = TRUE) {
   age_adjusted_flag <- is.null(age_grp)
   pvals <- compute_full_stats(comp_data, metric, age_adjusted = age_adjusted_flag)
   
@@ -261,12 +262,13 @@ create_comparison_plot <- function(comp_data, metric, y_label, age_grp = NULL, s
     geom_point(position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6), alpha = 0.5, size = 1.8) +
     scale_fill_manual(values = group_colors) +
     scale_color_manual(values = group_colors) +
-    labs(y = if(y_axis_text) y_label else NULL, x = NULL, title = NULL) +  # title removed
+    labs(y = if(y_axis_text) y_label else NULL, x = NULL, title = title_text) +
     theme_minimal(base_size = 14) +
     theme(
       panel.grid = element_blank(),
       axis.text.x = element_text(angle = 25, hjust = 1, size = 12),
       axis.title.y = element_text(size = 14, face = "bold"),
+      plot.title = element_text(size = 15, face = "bold", hjust = 0.5),
       legend.position = if(show_legend) "bottom" else "none",
       legend.title = element_blank(),
       legend.text = element_text(size = 13),
@@ -291,18 +293,26 @@ create_comparison_plot <- function(comp_data, metric, y_label, age_grp = NULL, s
 }
 
 # -------------------------
-# Generate plots for both metrics
+# Generate plots for both metrics with age labels
 # -------------------------
+age_labels <- c("7-12 months", "1-2 years", ">2 years")
+
 for(metric in c("Richness", "Fisher")) {
   y_label <- ifelse(metric == "Richness", "Species Richness", "Fisher's Alpha")
   file_prefix <- metric
   
   plots <- list()
-  plots[[1]] <- create_comparison_plot(prepare_comparison(alpha_data), metric, y_label, 
+  
+  # Age-adjusted plot with label
+  plots[[1]] <- create_comparison_plot(prepare_comparison(alpha_data), metric, y_label,
+                                       title_text = "Age-Adjusted",
                                        show_legend = FALSE, y_axis_text = TRUE)
+  
+  # Age-stratified plots with labels
   for(i in seq_along(age_groups)) {
     plots[[i+1]] <- create_comparison_plot(prepare_comparison(alpha_data, age_groups[i]),
                                            metric, y_label,
+                                           title_text = age_labels[i],
                                            age_grp = age_groups[i],
                                            show_legend = (i==length(age_groups)),
                                            y_axis_text = FALSE)
@@ -321,7 +331,7 @@ for(metric in c("Richness", "Fisher")) {
 
 cat("\n======================================================\n")
 cat("Single-row D1/D15 Ill vs D85 Not-Ill plots complete!\n")
-cat("Generated 2 sets of plots:\n")
+cat("Generated 2 sets of plots with age labels:\n")
 cat(" → Richness_D1D15_vs_D85_SingleRow_CORRECTED (PDF & EMF)\n")
 cat(" → Fisher_D1D15_vs_D85_SingleRow_CORRECTED (PDF & EMF)\n")
 cat("\nCombined detailed statistics CSV exported:\n")
