@@ -49,7 +49,7 @@ p <- ggplot(sig_iron, aes(x = coef, y = feature_clean, fill = color)) +
     plot.margin = margin(15, 40, 15, 40),
     axis.text.y = element_text(face = "italic", color = "black", size = 14),
     axis.text.x = element_text(color = "black", size = 14),
-    axis.title = element_text(color = "black", size = 16, face = "bold")
+    axis.title = element_text(color = "black", size = 16, face = "plain")
   )
 
 # --- Export PDF ---
