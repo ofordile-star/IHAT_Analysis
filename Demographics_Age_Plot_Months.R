@@ -100,17 +100,34 @@ demo_comparison <- df_demo %>%
 print(demo_comparison)
 
 # ======================================================
-# 3. PLOT 1: Age Distribution by Illness Status
+# 3. STATISTICAL TEST RESULTS TABLE
+# ======================================================
+
+# Create statistical test results table
+stat_results <- data.frame(
+  Test = "Mann-Whitney U",
+  Variable = "Age at sampling (months)",
+  W_statistic = round(age_test$statistic, 2),
+  P_value = round(age_test$p.value, 4),
+  Significance = ifelse(age_test$p.value < 0.05, "Significant", "Not Significant"),
+  Interpretation = ifelse(age_test$p.value < 0.05, 
+                          "Significant age difference between Ill and Not-Ill groups",
+                          "No significant age difference between groups")
+)
+
+print(kable(stat_results, caption = "Statistical Test Results"))
+
+# ======================================================
+# 4. PLOT 1: Age Distribution by Illness Status
 # ======================================================
 plot_age_dist <- ggplot(df_demo, aes(x = `age at sampling`, fill = Ill_Status)) +
   geom_histogram(alpha = 0.7, bins = 15, position = "identity") +
   facet_wrap(~Ill_Status, ncol = 1) +
   scale_fill_manual(values = c("Not-Ill" = "#4575B4", "Ill" = "#D73027")) +
   labs(x = "Age at Sampling (months)", 
-       y = "Number of Samples",
-       title = "Age Distribution by Illness Status") +
+       y = "Number of Samples") +
   annotate("text", x = Inf, y = Inf, hjust = 1.1, vjust = 2,
-           label = sprintf("Mann-Whitney U: p = %.3f", age_test$p.value),
+           label = sprintf("Mann-Whitney U: p = %.4f", age_test$p.value),
            size = 4) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "none",
@@ -138,6 +155,10 @@ write.csv(demo_comparison,
 
 write.csv(age_summary, 
           "C:/Users/oofordile/Desktop/Age_Summary_by_Illness.csv", 
+          row.names = FALSE)
+
+write.csv(stat_results, 
+          "C:/Users/oofordile/Desktop/Statistical_Test_Results.csv", 
           row.names = FALSE)
 
 cat("\nAnalysis complete. Plot (PDF + EMF) and CSVs saved to Desktop.\n")
