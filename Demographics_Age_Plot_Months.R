@@ -158,7 +158,7 @@ write.csv(age_summary,
           row.names = FALSE)
 
 write.csv(stat_results, 
-          "C:/Users/oofordile/Desktop/Statistical_Test_Results.csv", 
+          "C:/Users/oofordile/Desktop/Mann_Whitney_Test_Results.csv", 
           row.names = FALSE)
 
 cat("\nAnalysis complete. Plot (PDF + EMF) and CSVs saved to Desktop.\n")
