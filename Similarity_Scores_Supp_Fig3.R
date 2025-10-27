@@ -156,7 +156,7 @@ label_df <- wilcox_results %>%
 p <- ggplot(similarity_df, aes(x = AgeGroup, y = Similarity, fill = IllStatus)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +
   geom_jitter(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.5) +
-  geom_text(data = label_df, aes(x = AgeGroup, y = 1.02, label = label), inherit.aes = FALSE, size = 4) +
+  geom_text(data = label_df, aes(x = AgeGroup, y = 1.02, label = label), inherit.aes = FALSE, size = 5) +
   labs(y = "Similarity (1 - Bray–Curtis distance)",
        x = "Age Group") +
   scale_fill_manual(values = c("Ill" = "#D73027", "Not-Ill" = "#4575B4")) +
