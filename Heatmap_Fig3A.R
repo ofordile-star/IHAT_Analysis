@@ -131,7 +131,7 @@ ht <- Heatmap(
   column_labels = formatted_taxa,
   row_names_gp = gpar(fontsize = 8),
   column_names_gp = gpar(fontsize = 8),
-  column_title = "Top 50 Taxa Correlation Network",
+  column_title = "Top 50 Taxa",
   row_title = "Top 50 Taxa",
   top_annotation = col_ha,
   right_annotation = rowAnnotation(
